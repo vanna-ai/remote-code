@@ -12,20 +12,17 @@
 
 	async function loadProjects() {
 		try {
-			// For now, use mock data until API is fully integrated
-			projects = [
-				{
-					id: 1,
-					name: "Example Project",
-					baseDirectories: [
-						{ baseDirectoryId: "web-app", path: "/home/user/projects/web-app" }
-					],
-					tasks: []
-				}
-			];
+			loading = true;
+			const response = await fetch('/api/projects');
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			projects = await response.json();
 			loading = false;
 		} catch (error) {
 			console.error('Failed to load projects:', error);
+			// Fallback to empty array if API fails
+			projects = [];
 			loading = false;
 		}
 	}
@@ -34,19 +31,28 @@
 		if (!newProject.name.trim()) return;
 		
 		try {
-			// TODO: Integrate with API
-			const project = {
-				id: Date.now(),
-				name: newProject.name,
-				baseDirectories: [],
-				tasks: []
-			};
-			
-			projects = [...projects, project];
+			const response = await fetch('/api/projects', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					root_id: 1, // For now, use a default root_id
+					name: newProject.name
+				})
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const createdProject = await response.json();
+			projects = [...projects, createdProject];
 			newProject = { name: '' };
 			showCreateForm = false;
 		} catch (error) {
 			console.error('Failed to create project:', error);
+			alert('Failed to create project. Please try again.');
 		}
 	}
 </script>
@@ -167,13 +173,13 @@
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 								</svg>
-								{project.baseDirectories.length} directories
+								{(project.baseDirectories || []).length} directories
 							</div>
 							<div class="flex items-center text-sm text-gray-400">
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
-								{project.tasks.length} tasks
+								{(project.tasks || []).length} tasks
 							</div>
 						</div>
 

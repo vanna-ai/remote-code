@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -116,8 +117,48 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 	switch r.Method {
 	case "GET":
 		if len(pathParts) == 0 {
-			// List all projects - for now return empty
-			json.NewEncoder(w).Encode([]Project{})
+			// List all projects
+			dbProjects, err := queries.GetProjectsByRootID(ctx, 1) // Use default root_id for now
+			if err != nil {
+				http.Error(w, "Failed to get projects", http.StatusInternalServerError)
+				return
+			}
+
+			var projects []Project
+			for _, dbProject := range dbProjects {
+				// Get base directories for this project
+				dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, dbProject.ID)
+				if err != nil {
+					// Log error but continue
+					log.Printf("Failed to get base directories for project %d: %v", dbProject.ID, err)
+					dbBaseDirs = []db.BaseDirectory{}
+				}
+
+				var baseDirs []BaseDirectory
+				for _, dbBaseDir := range dbBaseDirs {
+					baseDirs = append(baseDirs, dbBaseDirectoryToBaseDirectory(dbBaseDir))
+				}
+
+				// Get tasks for this project (simplified for now)
+				tasks := []Task{}
+
+				// Ensure arrays are never null
+				if baseDirs == nil {
+					baseDirs = []BaseDirectory{}
+				}
+				if tasks == nil {
+					tasks = []Task{}
+				}
+				
+				project := Project{
+					Name:            dbProject.Name,
+					BaseDirectories: baseDirs,
+					Tasks:           tasks,
+				}
+				projects = append(projects, project)
+			}
+
+			json.NewEncoder(w).Encode(projects)
 		} else {
 			// Get specific project
 			id, err := strconv.ParseInt(pathParts[0], 10, 64)
@@ -146,6 +187,14 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 
 			// Get tasks (simplified for now)
 			tasks := []Task{}
+
+			// Ensure arrays are never null
+			if baseDirs == nil {
+				baseDirs = []BaseDirectory{}
+			}
+			if tasks == nil {
+				tasks = []Task{}
+			}
 
 			result := Project{
 				Name:            project.Name,
