@@ -110,3 +110,5 @@ temp/
 
 # OS generated files
 Thumbs.db
+remote-code
+remote-code.db

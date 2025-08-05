@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"web-terminal/db"
+	"remote-code/db"
 )
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os/exec"
 
-	"web-terminal/db"
+	"remote-code/db"
 
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
@@ -52,7 +52,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	cmd := exec.Command("tmux", "new-session", "-A", "-s", "web-terminal")
+	cmd := exec.Command("tmux", "new-session", "-A", "-s", "remote-code")
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start pty: %v", err)

@@ -1,12 +1,14 @@
 {
-  "name": "web-terminal-test",
+  "name": "remote-code",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "main.go",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "make build",
+    "dev": "make dev",
+    "clean": "make clean"
   },
-  "keywords": [],
+  "keywords": ["terminal", "tmux", "remote", "development"],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "Remote-Code - Interactive terminal with tmux session management"
 }

@@ -2,7 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"web-terminal/db"
+	"remote-code/db"
 )
 
 // Root represents the main configuration structure

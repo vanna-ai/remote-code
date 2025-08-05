@@ -6,7 +6,7 @@ frontend:
 	cd frontend && npm run build
 
 backend:
-	go build -o web-terminal .
+	go build -o remote-code .
 
 dev:
 	go run .
@@ -19,8 +19,8 @@ sqlc-generate:
 
 clean:
 	rm -rf static/*
-	rm -f web-terminal
-	rm -f web-terminal.db
+	rm -f remote-code
+	rm -f remote-code.db
 
 run: build
-	./web-terminal
+	./remote-code

@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"web-terminal/db"
+	"remote-code/db"
 
 	_ "modernc.org/sqlite"
 )
 
 func initDatabase() (*sql.DB, *db.Queries) {
-	dbPath := "web-terminal.db"
+	dbPath := "remote-code.db"
 	
 	// Ensure directory exists
 	dbDir := filepath.Dir(dbPath)

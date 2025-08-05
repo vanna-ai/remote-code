@@ -1,5 +1,6 @@
 {
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.8"
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@tailwindcss/postcss": "^4.1.11"
   }
 }
