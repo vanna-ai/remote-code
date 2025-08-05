@@ -17,7 +17,7 @@ type Root struct {
 type Project struct {
 	ID              int64           `json:"id"`
 	Name            string          `yaml:"name" json:"name"`
-	BaseDirectories []BaseDirectory `yaml:"base_directories" json:"base_directories"`
+	BaseDirectories []BaseDirectory `yaml:"base_directories" json:"baseDirectories"`
 	Tasks           []Task          `yaml:"tasks" json:"tasks"`
 }
 

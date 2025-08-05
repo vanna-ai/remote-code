@@ -89,22 +89,37 @@
 	}
 	
 	async function createDirectory() {
-		if (!newDirectory.path.trim()) return;
+		console.log('createDirectory called', { newDirectory, projectId });
+		
+		if (!newDirectory.path.trim()) {
+			console.log('Path is empty, returning');
+			return;
+		}
 		
 		try {
-			const response = await fetch(`/api/projects/${projectId}/base-directories`, {
+			const url = `/api/projects/${projectId}/base-directories`;
+			const body = JSON.stringify(newDirectory);
+			console.log('Making request to:', url, 'with body:', body);
+			
+			const response = await fetch(url, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify(newDirectory)
+				body: body
 			});
 			
+			console.log('Response status:', response.status);
+			
 			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('HTTP error response:', errorText);
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 			
 			const createdDirectory = await response.json();
+			console.log('Created directory:', createdDirectory);
+			
 			project.baseDirectories = [...(project.baseDirectories || []), createdDirectory];
 			newDirectory = { 
 				path: '', 
@@ -115,6 +130,7 @@
 				devServerTeardownCommands: ''
 			};
 			showCreateDirectoryForm = false;
+			console.log('Directory creation completed successfully');
 		} catch (error) {
 			console.error('Failed to create directory:', error);
 			alert('Failed to create directory. Please try again.');
