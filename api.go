@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"remote-code/db"
 )
 
@@ -117,6 +119,12 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 	// Handle tasks sub-resource: /api/projects/{id}/tasks
 	if len(pathParts) >= 2 && pathParts[1] == "tasks" {
 		handleProjectTasksAPI(w, r, ctx, pathParts)
+		return
+	}
+	
+	// Handle base-directories sub-resource: /api/projects/{id}/base-directories
+	if len(pathParts) >= 2 && pathParts[1] == "base-directories" {
+		handleProjectBaseDirectoriesAPI(w, r, ctx, pathParts)
 		return
 	}
 	
@@ -303,6 +311,77 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 		}
 		
 		json.NewEncoder(w).Encode(mockTask)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if len(pathParts) < 2 {
+		http.Error(w, "Project ID required", http.StatusBadRequest)
+		return
+	}
+	
+	projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	
+	switch r.Method {
+	case "GET":
+		// Get base directories for project
+		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+		if err != nil {
+			log.Printf("Failed to get base directories for project %d: %v", projectID, err)
+			json.NewEncoder(w).Encode([]BaseDirectory{})
+			return
+		}
+		
+		baseDirs := make([]BaseDirectory, 0)
+		for _, dbBaseDir := range dbBaseDirs {
+			baseDirs = append(baseDirs, dbBaseDirectoryToBaseDirectory(dbBaseDir))
+		}
+		
+		json.NewEncoder(w).Encode(baseDirs)
+		
+	case "POST":
+		// Create a new base directory for this project
+		var createReq struct {
+			Path                      string `json:"path"`
+			GitInitialized            bool   `json:"gitInitialized"`
+			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
+			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
+			DevServerSetupCommands    string `json:"devServerSetupCommands"`
+			DevServerTeardownCommands string `json:"devServerTeardownCommands"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		// Generate a unique base directory ID
+		baseDirectoryID := fmt.Sprintf("bd_%d_%d", projectID, time.Now().Unix())
+		
+		dbBaseDir, err := queries.CreateBaseDirectory(ctx, db.CreateBaseDirectoryParams{
+			ProjectID:                 projectID,
+			BaseDirectoryID:           baseDirectoryID,
+			Path:                      createReq.Path,
+			GitInitialized:            createReq.GitInitialized,
+			WorktreeSetupCommands:     createReq.WorktreeSetupCommands,
+			WorktreeTeardownCommands:  createReq.WorktreeTeardownCommands,
+			DevServerSetupCommands:    createReq.DevServerSetupCommands,
+			DevServerTeardownCommands: createReq.DevServerTeardownCommands,
+		})
+		if err != nil {
+			http.Error(w, "Failed to create base directory", http.StatusInternalServerError)
+			return
+		}
+		
+		result := dbBaseDirectoryToBaseDirectory(dbBaseDir)
+		json.NewEncoder(w).Encode(result)
 		
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

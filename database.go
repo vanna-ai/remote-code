@@ -2,9 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"remote-code/db"
 
@@ -12,7 +14,17 @@ import (
 )
 
 func initDatabase() (*sql.DB, *db.Queries) {
-	dbPath := "remote-code.db"
+	database, queries, _ := initDatabaseWithPathAndReturn("remote-code.db")
+	return database, queries
+}
+
+func initTestDatabase() (*sql.DB, *db.Queries, string) {
+	// Use a unique filename for each test run to avoid conflicts
+	testDbPath := fmt.Sprintf("remote-code-test-%d.db", time.Now().UnixNano())
+	return initDatabaseWithPathAndReturn(testDbPath)
+}
+
+func initDatabaseWithPathAndReturn(dbPath string) (*sql.DB, *db.Queries, string) {
 	
 	// Ensure directory exists
 	dbDir := filepath.Dir(dbPath)
@@ -39,7 +51,7 @@ func initDatabase() (*sql.DB, *db.Queries) {
 	}
 
 	queries := db.New(database)
-	return database, queries
+	return database, queries, dbPath
 }
 
 func applyMigrations(database *sql.DB) error {

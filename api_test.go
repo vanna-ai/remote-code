@@ -4,17 +4,31 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"remote-code/db"
 )
 
+var testDbPath string
+
 func TestMain(m *testing.M) {
 	// Setup test database
-	database, queries = initDatabase()
+	database, queries, testDbPath = initTestDatabase()
 	defer database.Close()
+	
+	// Clean up test database file when done
+	defer func() {
+		os.Remove(testDbPath)
+		// Also clean up any other test database files just in case
+		matches, _ := filepath.Glob("remote-code-test-*.db")
+		for _, match := range matches {
+			os.Remove(match)
+		}
+	}()
 	
 	// Run tests
 	code := m.Run()
@@ -299,5 +313,66 @@ func TestProjectTasksAPI_POST(t *testing.T) {
 	
 	if task.Status != "todo" {
 		t.Errorf("Expected task status 'todo', got '%s'", task.Status)
+	}
+}
+
+func TestProjectBaseDirectoriesAPI_POST(t *testing.T) {
+	setupTestDB(t)
+	
+	// Create a project first
+	ctx := context.Background()
+	project, err := queries.CreateProject(ctx, db.CreateProjectParams{
+		RootID: 1,
+		Name:   "Test Project",
+	})
+	if err != nil {
+		// Create root first if it doesn't exist
+		_, err = queries.CreateRoot(ctx, db.CreateRootParams{
+			LocalPort: "8080",
+		})
+		if err != nil {
+			t.Fatalf("Failed to create root: %v", err)
+		}
+		
+		project, err = queries.CreateProject(ctx, db.CreateProjectParams{
+			RootID: 1,
+			Name:   "Test Project",
+		})
+		if err != nil {
+			t.Fatalf("Failed to create project: %v", err)
+		}
+	}
+	
+	directoryData := map[string]interface{}{
+		"path":                        "/test/directory",
+		"gitInitialized":             true,
+		"worktreeSetupCommands":      "npm install",
+		"worktreeTeardownCommands":   "",
+		"devServerSetupCommands":     "npm run dev",
+		"devServerTeardownCommands":  "",
+	}
+	
+	jsonData, _ := json.Marshal(directoryData)
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%d/base-directories", project.ID), bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	
+	handleAPI(w, req)
+	
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d. Response: %s", w.Code, w.Body.String())
+	}
+	
+	var directory BaseDirectory
+	if err := json.Unmarshal(w.Body.Bytes(), &directory); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
+	
+	if directory.Path != "/test/directory" {
+		t.Errorf("Expected directory path '/test/directory', got '%s'", directory.Path)
+	}
+	
+	if !directory.GitInitialized {
+		t.Errorf("Expected GitInitialized to be true")
 	}
 }

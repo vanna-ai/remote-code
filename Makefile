@@ -21,6 +21,7 @@ clean:
 	rm -rf static/*
 	rm -f remote-code
 	rm -f remote-code.db
+	rm -f remote-code-test*.db
 
 run: build
 	./remote-code

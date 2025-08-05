@@ -7,7 +7,16 @@
 	let error = null;
 	let viewMode = 'kanban'; // 'kanban' or 'list'
 	let showCreateTaskForm = false;
+	let showCreateDirectoryForm = false;
 	let newTask = { title: '', description: '', status: 'todo' };
+	let newDirectory = { 
+		path: '', 
+		gitInitialized: false,
+		worktreeSetupCommands: '',
+		worktreeTeardownCommands: '',
+		devServerSetupCommands: '',
+		devServerTeardownCommands: ''
+	};
 	
 	// Kanban columns
 	const columns = [
@@ -78,6 +87,39 @@
 			alert('Failed to create task. Please try again.');
 		}
 	}
+	
+	async function createDirectory() {
+		if (!newDirectory.path.trim()) return;
+		
+		try {
+			const response = await fetch(`/api/projects/${projectId}/base-directories`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(newDirectory)
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			
+			const createdDirectory = await response.json();
+			project.baseDirectories = [...(project.baseDirectories || []), createdDirectory];
+			newDirectory = { 
+				path: '', 
+				gitInitialized: false,
+				worktreeSetupCommands: '',
+				worktreeTeardownCommands: '',
+				devServerSetupCommands: '',
+				devServerTeardownCommands: ''
+			};
+			showCreateDirectoryForm = false;
+		} catch (error) {
+			console.error('Failed to create directory:', error);
+			alert('Failed to create directory. Please try again.');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -136,6 +178,16 @@
 								List
 							</button>
 						</div>
+						
+						<button 
+							on:click={() => showCreateDirectoryForm = true}
+							class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+						>
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+							</svg>
+							Add Directory
+						</button>
 						
 						<button 
 							on:click={() => showCreateTaskForm = true}
@@ -211,6 +263,151 @@
 						</button>
 					</div>
 				</form>
+			</div>
+		{/if}
+
+		<!-- Create Directory Form -->
+		{#if showCreateDirectoryForm}
+			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+				<h3 class="text-xl font-semibold text-white mb-4">Add Base Directory</h3>
+				<form on:submit|preventDefault={createDirectory} class="space-y-4">
+					<div>
+						<label for="directory-path" class="block text-sm font-medium text-gray-300 mb-2">
+							Directory Path
+						</label>
+						<input 
+							id="directory-path"
+							type="text" 
+							bind:value={newDirectory.path}
+							placeholder="/path/to/project/directory"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+							required
+						/>
+					</div>
+					
+					<div class="flex items-center">
+						<input 
+							id="git-initialized"
+							type="checkbox" 
+							bind:checked={newDirectory.gitInitialized}
+							class="w-4 h-4 text-green-500 bg-gray-700 border-gray-600 rounded focus:ring-green-400 focus:ring-2"
+						/>
+						<label for="git-initialized" class="ml-2 text-sm text-gray-300">
+							Git initialized
+						</label>
+					</div>
+					
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label for="worktree-setup" class="block text-sm font-medium text-gray-300 mb-2">
+								Worktree Setup Commands
+							</label>
+							<textarea 
+								id="worktree-setup"
+								bind:value={newDirectory.worktreeSetupCommands}
+								placeholder="npm install"
+								rows="3"
+								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+							></textarea>
+						</div>
+						
+						<div>
+							<label for="worktree-teardown" class="block text-sm font-medium text-gray-300 mb-2">
+								Worktree Teardown Commands
+							</label>
+							<textarea 
+								id="worktree-teardown"
+								bind:value={newDirectory.worktreeTeardownCommands}
+								placeholder="npm run clean"
+								rows="3"
+								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+							></textarea>
+						</div>
+						
+						<div>
+							<label for="dev-server-setup" class="block text-sm font-medium text-gray-300 mb-2">
+								Dev Server Setup Commands
+							</label>
+							<textarea 
+								id="dev-server-setup"
+								bind:value={newDirectory.devServerSetupCommands}
+								placeholder="npm run dev"
+								rows="3"
+								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+							></textarea>
+						</div>
+						
+						<div>
+							<label for="dev-server-teardown" class="block text-sm font-medium text-gray-300 mb-2">
+								Dev Server Teardown Commands
+							</label>
+							<textarea 
+								id="dev-server-teardown"
+								bind:value={newDirectory.devServerTeardownCommands}
+								placeholder="pkill -f 'npm run dev'"
+								rows="3"
+								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+							></textarea>
+						</div>
+					</div>
+					
+					<div class="flex gap-3">
+						<button 
+							type="submit"
+							class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Add Directory
+						</button>
+						<button 
+							type="button"
+							on:click={() => showCreateDirectoryForm = false}
+							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
+			</div>
+		{/if}
+
+		<!-- Base Directories Section -->
+		{#if project && (project.baseDirectories || []).length > 0}
+			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+				<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+					<svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+					</svg>
+					Base Directories
+				</h3>
+				
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					{#each project.baseDirectories as directory}
+						<div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+							<div class="flex items-center gap-2 mb-2">
+								<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+								</svg>
+								<span class="font-mono text-sm text-green-300">{directory.path}</span>
+								{#if directory.gitInitialized}
+									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+										Git
+									</span>
+								{/if}
+							</div>
+							
+							{#if directory.worktreeSetupCommands || directory.devServerSetupCommands}
+								<div class="text-xs text-gray-400 space-y-1">
+									{#if directory.worktreeSetupCommands}
+										<div><strong>Setup:</strong> {directory.worktreeSetupCommands}</div>
+									{/if}
+									{#if directory.devServerSetupCommands}
+										<div><strong>Dev Server:</strong> {directory.devServerSetupCommands}</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
 			</div>
 		{/if}
 
