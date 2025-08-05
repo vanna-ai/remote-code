@@ -36,7 +36,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	cmd := exec.Command("/bin/bash")
+	cmd := exec.Command("tmux", "new-session", "-A", "-s", "web-terminal")
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start pty: %v", err)
