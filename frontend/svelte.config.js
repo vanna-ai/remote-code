@@ -14,9 +14,9 @@ const config = {
 		adapter: adapter({
 			pages: '../static',
 			assets: '../static',
-			fallback: null,
+			fallback: 'index.html',
 			precompress: false,
-			strict: true
+			strict: false
 		})
 	}
 };

@@ -5,7 +5,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"strings"
 
 	"remote-code/db"
 
@@ -37,10 +39,25 @@ func main() {
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
+	// API routes should be handled by the API handler
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Check if the requested file exists in static directory
+	filePath := "static" + r.URL.Path
 	if r.URL.Path == "/" {
-		http.ServeFile(w, r, "static/index.html")
+		filePath = "static/index.html"
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); err == nil {
+		// File exists, serve it
+		http.ServeFile(w, r, filePath)
 	} else {
-		http.ServeFile(w, r, "static"+r.URL.Path)
+		// File doesn't exist, serve index.html for SPA routing
+		http.ServeFile(w, r, "static/index.html")
 	}
 }
 
