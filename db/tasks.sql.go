@@ -11,32 +11,35 @@ import (
 )
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (project_id, title, description, worktree_id)
-VALUES (?, ?, ?, ?)
-RETURNING id, project_id, title, description, worktree_id, created_at, updated_at
+INSERT INTO tasks (project_id, base_directory_id, title, description, status)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, project_id, base_directory_id, title, description, status, created_at, updated_at
 `
 
 type CreateTaskParams struct {
-	ProjectID   int64         `db:"project_id" json:"project_id"`
-	Title       string        `db:"title" json:"title"`
-	Description string        `db:"description" json:"description"`
-	WorktreeID  sql.NullInt64 `db:"worktree_id" json:"worktree_id"`
+	ProjectID       int64  `db:"project_id" json:"project_id"`
+	BaseDirectoryID string `db:"base_directory_id" json:"base_directory_id"`
+	Title           string `db:"title" json:"title"`
+	Description     string `db:"description" json:"description"`
+	Status          string `db:"status" json:"status"`
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, createTask,
 		arg.ProjectID,
+		arg.BaseDirectoryID,
 		arg.Title,
 		arg.Description,
-		arg.WorktreeID,
+		arg.Status,
 	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.BaseDirectoryID,
 		&i.Title,
 		&i.Description,
-		&i.WorktreeID,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -53,7 +56,7 @@ func (q *Queries) DeleteTask(ctx context.Context, id int64) error {
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, project_id, title, description, worktree_id, created_at, updated_at FROM tasks
+SELECT id, project_id, base_directory_id, title, description, status, created_at, updated_at FROM tasks
 WHERE id = ?
 `
 
@@ -63,65 +66,71 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.BaseDirectoryID,
 		&i.Title,
 		&i.Description,
-		&i.WorktreeID,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getTaskWithWorktree = `-- name: GetTaskWithWorktree :one
+const getTaskWithBaseDirectory = `-- name: GetTaskWithBaseDirectory :one
 SELECT 
-    t.id, t.project_id, t.title, t.description, t.worktree_id, t.created_at, t.updated_at,
-    w.base_directory_id,
-    w.path as worktree_path,
-    w.agent_tmux_id,
-    w.dev_server_tmux_id,
-    w.external_url as worktree_external_url
+    t.id, t.project_id, t.base_directory_id, t.title, t.description, t.status, t.created_at, t.updated_at,
+    bd.path as base_directory_path,
+    bd.git_initialized,
+    bd.worktree_setup_commands,
+    bd.worktree_teardown_commands,
+    bd.dev_server_setup_commands,
+    bd.dev_server_teardown_commands
 FROM tasks t
-LEFT JOIN worktrees w ON t.worktree_id = w.id
+JOIN base_directories bd ON t.base_directory_id = bd.base_directory_id
 WHERE t.id = ?
 `
 
-type GetTaskWithWorktreeRow struct {
-	ID                  int64          `db:"id" json:"id"`
-	ProjectID           int64          `db:"project_id" json:"project_id"`
-	Title               string         `db:"title" json:"title"`
-	Description         string         `db:"description" json:"description"`
-	WorktreeID          sql.NullInt64  `db:"worktree_id" json:"worktree_id"`
-	CreatedAt           sql.NullTime   `db:"created_at" json:"created_at"`
-	UpdatedAt           sql.NullTime   `db:"updated_at" json:"updated_at"`
-	BaseDirectoryID     sql.NullString `db:"base_directory_id" json:"base_directory_id"`
-	WorktreePath        sql.NullString `db:"worktree_path" json:"worktree_path"`
-	AgentTmuxID         sql.NullString `db:"agent_tmux_id" json:"agent_tmux_id"`
-	DevServerTmuxID     sql.NullString `db:"dev_server_tmux_id" json:"dev_server_tmux_id"`
-	WorktreeExternalUrl sql.NullString `db:"worktree_external_url" json:"worktree_external_url"`
+type GetTaskWithBaseDirectoryRow struct {
+	ID                        int64        `db:"id" json:"id"`
+	ProjectID                 int64        `db:"project_id" json:"project_id"`
+	BaseDirectoryID           string       `db:"base_directory_id" json:"base_directory_id"`
+	Title                     string       `db:"title" json:"title"`
+	Description               string       `db:"description" json:"description"`
+	Status                    string       `db:"status" json:"status"`
+	CreatedAt                 sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt                 sql.NullTime `db:"updated_at" json:"updated_at"`
+	BaseDirectoryPath         string       `db:"base_directory_path" json:"base_directory_path"`
+	GitInitialized            bool         `db:"git_initialized" json:"git_initialized"`
+	WorktreeSetupCommands     string       `db:"worktree_setup_commands" json:"worktree_setup_commands"`
+	WorktreeTeardownCommands  string       `db:"worktree_teardown_commands" json:"worktree_teardown_commands"`
+	DevServerSetupCommands    string       `db:"dev_server_setup_commands" json:"dev_server_setup_commands"`
+	DevServerTeardownCommands string       `db:"dev_server_teardown_commands" json:"dev_server_teardown_commands"`
 }
 
-func (q *Queries) GetTaskWithWorktree(ctx context.Context, id int64) (GetTaskWithWorktreeRow, error) {
-	row := q.db.QueryRowContext(ctx, getTaskWithWorktree, id)
-	var i GetTaskWithWorktreeRow
+func (q *Queries) GetTaskWithBaseDirectory(ctx context.Context, id int64) (GetTaskWithBaseDirectoryRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskWithBaseDirectory, id)
+	var i GetTaskWithBaseDirectoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.BaseDirectoryID,
 		&i.Title,
 		&i.Description,
-		&i.WorktreeID,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.BaseDirectoryID,
-		&i.WorktreePath,
-		&i.AgentTmuxID,
-		&i.DevServerTmuxID,
-		&i.WorktreeExternalUrl,
+		&i.BaseDirectoryPath,
+		&i.GitInitialized,
+		&i.WorktreeSetupCommands,
+		&i.WorktreeTeardownCommands,
+		&i.DevServerSetupCommands,
+		&i.DevServerTeardownCommands,
 	)
 	return i, err
 }
 
 const getTasksByProjectID = `-- name: GetTasksByProjectID :many
-SELECT id, project_id, title, description, worktree_id, created_at, updated_at FROM tasks
+SELECT id, project_id, base_directory_id, title, description, status, created_at, updated_at FROM tasks
 WHERE project_id = ?
 ORDER BY title
 `
@@ -138,9 +147,10 @@ func (q *Queries) GetTasksByProjectID(ctx context.Context, projectID int64) ([]T
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
+			&i.BaseDirectoryID,
 			&i.Title,
 			&i.Description,
-			&i.WorktreeID,
+			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -162,33 +172,34 @@ UPDATE tasks
 SET 
     title = ?,
     description = ?,
-    worktree_id = ?,
+    status = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, project_id, title, description, worktree_id, created_at, updated_at
+RETURNING id, project_id, base_directory_id, title, description, status, created_at, updated_at
 `
 
 type UpdateTaskParams struct {
-	Title       string        `db:"title" json:"title"`
-	Description string        `db:"description" json:"description"`
-	WorktreeID  sql.NullInt64 `db:"worktree_id" json:"worktree_id"`
-	ID          int64         `db:"id" json:"id"`
+	Title       string `db:"title" json:"title"`
+	Description string `db:"description" json:"description"`
+	Status      string `db:"status" json:"status"`
+	ID          int64  `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, updateTask,
 		arg.Title,
 		arg.Description,
-		arg.WorktreeID,
+		arg.Status,
 		arg.ID,
 	)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.BaseDirectoryID,
 		&i.Title,
 		&i.Description,
-		&i.WorktreeID,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

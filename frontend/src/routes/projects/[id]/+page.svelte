@@ -8,7 +8,7 @@
 	let viewMode = 'kanban'; // 'kanban' or 'list'
 	let showCreateTaskForm = false;
 	let showCreateDirectoryForm = false;
-	let newTask = { title: '', description: '', status: 'todo' };
+	let newTask = { title: '', description: '', status: 'todo', baseDirectoryId: '' };
 	let newDirectory = { 
 		path: '', 
 		gitInitialized: false,
@@ -17,6 +17,8 @@
 		devServerSetupCommands: '',
 		devServerTeardownCommands: ''
 	};
+	let selectedTask = null;
+	let showTaskModal = false;
 	
 	// Kanban columns
 	const columns = [
@@ -24,6 +26,13 @@
 		{ id: 'in_progress', title: 'In Progress', color: 'bg-blue-500' },
 		{ id: 'done', title: 'Done', color: 'bg-green-500' }
 	];
+	
+	// Function to set default base directory when opening form
+	function setDefaultBaseDirectory() {
+		if (project && project.baseDirectories && project.baseDirectories.length === 1) {
+			newTask.baseDirectoryId = project.baseDirectories[0].base_directory_id;
+		}
+	}
 	
 	$: projectId = $page.params.id;
 	
@@ -64,6 +73,10 @@
 	
 	async function createTask() {
 		if (!newTask.title.trim()) return;
+		if (!newTask.baseDirectoryId) {
+			alert('Please select a base directory for the task.');
+			return;
+		}
 		
 		try {
 			const response = await fetch(`/api/projects/${projectId}/tasks`, {
@@ -80,7 +93,12 @@
 			
 			const createdTask = await response.json();
 			project.tasks = [...(project.tasks || []), createdTask];
-			newTask = { title: '', description: '', status: 'todo' };
+			
+			// Reset form with default base directory if only one exists
+			const defaultBaseDir = project.baseDirectories && project.baseDirectories.length === 1 
+				? project.baseDirectories[0].base_directory_id 
+				: '';
+			newTask = { title: '', description: '', status: 'todo', baseDirectoryId: defaultBaseDir };
 			showCreateTaskForm = false;
 		} catch (error) {
 			console.error('Failed to create task:', error);
@@ -135,6 +153,42 @@
 			console.error('Failed to create directory:', error);
 			alert('Failed to create directory. Please try again.');
 		}
+	}
+	
+	async function deleteDirectory(directoryId) {
+		if (!confirm('Are you sure you want to delete this directory? This action cannot be undone.')) {
+			return;
+		}
+		
+		try {
+			const url = `/api/projects/${projectId}/base-directories/${directoryId}`;
+			console.log('Deleting directory:', url);
+			
+			const response = await fetch(url, {
+				method: 'DELETE'
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			
+			// Remove the directory from the local state
+			project.baseDirectories = project.baseDirectories.filter(dir => dir.base_directory_id !== directoryId);
+			console.log('Directory deleted successfully');
+		} catch (error) {
+			console.error('Failed to delete directory:', error);
+			alert('Failed to delete directory. Please try again.');
+		}
+	}
+	
+	function selectTask(task) {
+		selectedTask = task;
+		showTaskModal = true;
+	}
+	
+	function closeTaskModal() {
+		selectedTask = null;
+		showTaskModal = false;
 	}
 </script>
 
@@ -206,7 +260,10 @@
 						</button>
 						
 						<button 
-							on:click={() => showCreateTaskForm = true}
+							on:click={() => {
+								showCreateTaskForm = true;
+								setDefaultBaseDirectory();
+							}}
 							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
 						>
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,6 +305,24 @@
 							rows="3"
 							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
 						></textarea>
+					</div>
+					<div>
+						<label for="task-base-directory" class="block text-sm font-medium text-gray-300 mb-2">
+							Base Directory
+						</label>
+						<select 
+							id="task-base-directory"
+							bind:value={newTask.baseDirectoryId}
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+							required
+						>
+							<option value="">Select a base directory...</option>
+							{#if project && project.baseDirectories}
+								{#each project.baseDirectories as directory}
+									<option value={directory.base_directory_id}>{directory.path}</option>
+								{/each}
+							{/if}
+						</select>
 					</div>
 					<div>
 						<label for="task-status" class="block text-sm font-medium text-gray-300 mb-2">
@@ -399,16 +474,28 @@
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					{#each project.baseDirectories as directory}
 						<div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
-							<div class="flex items-center gap-2 mb-2">
-								<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
-								</svg>
-								<span class="font-mono text-sm text-green-300">{directory.path}</span>
-								{#if directory.gitInitialized}
-									<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
-										Git
-									</span>
-								{/if}
+							<div class="flex items-center justify-between mb-2">
+								<div class="flex items-center gap-2">
+									<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+									</svg>
+									<span class="font-mono text-sm text-green-300">{directory.path}</span>
+									{#if directory.gitInitialized}
+										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+											Git
+										</span>
+									{/if}
+								</div>
+								<button 
+									on:click={() => deleteDirectory(directory.base_directory_id)}
+									class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors"
+									title="Delete directory"
+									aria-label="Delete directory"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+									</svg>
+								</button>
 							</div>
 							
 							{#if directory.worktreeSetupCommands || directory.devServerSetupCommands}
@@ -456,11 +543,17 @@
 							
 							<div class="space-y-3">
 								{#each getTasksByStatus(column.id) as task}
-									<div class="bg-gray-700 rounded-lg p-3 border border-gray-600 hover:border-gray-500 transition-colors">
+									<div 
+										class="bg-gray-700 rounded-lg p-3 border border-gray-600 hover:border-gray-500 hover:bg-gray-650 cursor-pointer transition-colors"
+										on:click={() => selectTask(task)}
+									>
 										<h4 class="font-medium text-white mb-1">{task.title}</h4>
 										{#if task.description}
 											<p class="text-sm text-gray-300 mb-2">{task.description}</p>
 										{/if}
+										<div class="text-xs text-gray-400 mt-2">
+											📁 {task.baseDirectory.path}
+										</div>
 									</div>
 								{/each}
 								
@@ -496,13 +589,19 @@
 					{:else}
 						<div class="divide-y divide-gray-700">
 							{#each project.tasks || [] as task}
-								<div class="p-4 hover:bg-gray-750 transition-colors">
+								<div 
+									class="p-4 hover:bg-gray-750 cursor-pointer transition-colors"
+									on:click={() => selectTask(task)}
+								>
 									<div class="flex items-start justify-between">
 										<div class="flex-1">
 											<h4 class="font-medium text-white mb-1">{task.title}</h4>
 											{#if task.description}
 												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
 											{/if}
+											<div class="text-xs text-gray-400 mt-1">
+												📁 {task.baseDirectory.path}
+											</div>
 										</div>
 										<div class="flex items-center gap-2 ml-4">
 											{#each columns as column}
@@ -524,3 +623,87 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Task Detail Modal -->
+{#if showTaskModal && selectedTask}
+	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeTaskModal}>
+		<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4" on:click|stopPropagation>
+			<div class="flex items-center justify-between mb-4">
+				<h2 class="text-xl font-semibold text-white">Task Details</h2>
+				<button 
+					on:click={closeTaskModal}
+					class="text-gray-400 hover:text-white transition-colors"
+					aria-label="Close modal"
+				>
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+					</svg>
+				</button>
+			</div>
+			
+			<div class="space-y-4">
+				<div>
+					<h3 class="text-lg font-medium text-white mb-2">{selectedTask.title}</h3>
+					<div class="flex items-center gap-2 mb-3">
+						{#each columns as column}
+							{#if column.id === selectedTask.status}
+								<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
+									<div class="w-2 h-2 rounded-full {column.color}"></div>
+									{column.title}
+								</span>
+							{/if}
+						{/each}
+					</div>
+				</div>
+				
+				{#if selectedTask.description}
+					<div>
+						<h4 class="text-sm font-medium text-gray-300 mb-2">Description</h4>
+						<p class="text-gray-400">{selectedTask.description}</p>
+					</div>
+				{/if}
+				
+				<div>
+					<h4 class="text-sm font-medium text-gray-300 mb-2">Base Directory</h4>
+					<div class="bg-gray-700 rounded-lg p-3 border border-gray-600">
+						<div class="flex items-center gap-2 mb-2">
+							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+							</svg>
+							<span class="font-mono text-sm text-green-300">{selectedTask.baseDirectory.path}</span>
+							{#if selectedTask.baseDirectory.git_initialized}
+								<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+									Git
+								</span>
+							{/if}
+						</div>
+						
+						{#if selectedTask.baseDirectory.worktree_setup_commands || selectedTask.baseDirectory.dev_server_setup_commands}
+							<div class="text-xs text-gray-400 space-y-1">
+								{#if selectedTask.baseDirectory.worktree_setup_commands}
+									<div><strong>Setup:</strong> {selectedTask.baseDirectory.worktree_setup_commands}</div>
+								{/if}
+								{#if selectedTask.baseDirectory.dev_server_setup_commands}
+									<div><strong>Dev Server:</strong> {selectedTask.baseDirectory.dev_server_setup_commands}</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+				
+				<div class="pt-4 border-t border-gray-700">
+					<h4 class="text-sm font-medium text-gray-300 mb-3">Execute Task</h4>
+					<div class="bg-gray-700 rounded-lg p-4 text-center">
+						<p class="text-gray-400 mb-3">Select agents to execute this task</p>
+						<button 
+							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+							disabled
+						>
+							Start Execution (Coming Soon)
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}

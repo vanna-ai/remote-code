@@ -43,10 +43,20 @@ type Worktree struct {
 
 // Task represents a task configuration
 type Task struct {
-	Title       string   `yaml:"title" json:"title"`
-	Description string   `yaml:"description" json:"description"`
-	Status      string   `json:"status,omitempty"` // For Kanban board (todo, in_progress, done)
-	Worktree    Worktree `yaml:"worktree" json:"worktree"`
+	ID              int64         `json:"id"`
+	Title           string        `yaml:"title" json:"title"`
+	Description     string        `yaml:"description" json:"description"`
+	Status          string        `json:"status"` // For Kanban board (todo, in_progress, done)
+	BaseDirectory   BaseDirectory `json:"baseDirectory"`
+}
+
+// TaskExecution represents a task being executed by an agent in a worktree
+type TaskExecution struct {
+	ID        int64    `json:"id"`
+	TaskID    int64    `json:"taskId"`
+	Status    string   `json:"status"`
+	Agent     Agent    `json:"agent"`
+	Worktree  Worktree `json:"worktree"`
 }
 
 // Agent represents an available agent
@@ -112,6 +122,16 @@ func dbWorktreeToWorktree(dbWorktree db.Worktree) Worktree {
 		AgentTmuxId:     agentTmuxId,
 		DevServerTmuxId: devServerTmuxId,
 		ExternalUrl:     externalUrl,
+	}
+}
+
+func dbTaskToTask(dbTask db.Task, baseDirectory BaseDirectory) Task {
+	return Task{
+		ID:            dbTask.ID,
+		Title:         dbTask.Title,
+		Description:   dbTask.Description,
+		Status:        dbTask.Status,
+		BaseDirectory: baseDirectory,
 	}
 }
 

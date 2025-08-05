@@ -49,13 +49,24 @@ type Root struct {
 }
 
 type Task struct {
-	ID          int64         `db:"id" json:"id"`
-	ProjectID   int64         `db:"project_id" json:"project_id"`
-	Title       string        `db:"title" json:"title"`
-	Description string        `db:"description" json:"description"`
-	WorktreeID  sql.NullInt64 `db:"worktree_id" json:"worktree_id"`
-	CreatedAt   sql.NullTime  `db:"created_at" json:"created_at"`
-	UpdatedAt   sql.NullTime  `db:"updated_at" json:"updated_at"`
+	ID              int64        `db:"id" json:"id"`
+	ProjectID       int64        `db:"project_id" json:"project_id"`
+	BaseDirectoryID string       `db:"base_directory_id" json:"base_directory_id"`
+	Title           string       `db:"title" json:"title"`
+	Description     string       `db:"description" json:"description"`
+	Status          string       `db:"status" json:"status"`
+	CreatedAt       sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt       sql.NullTime `db:"updated_at" json:"updated_at"`
+}
+
+type TaskExecution struct {
+	ID         int64        `db:"id" json:"id"`
+	TaskID     int64        `db:"task_id" json:"task_id"`
+	AgentID    int64        `db:"agent_id" json:"agent_id"`
+	WorktreeID int64        `db:"worktree_id" json:"worktree_id"`
+	Status     string       `db:"status" json:"status"`
+	CreatedAt  sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt  sql.NullTime `db:"updated_at" json:"updated_at"`
 }
 
 type Worktree struct {

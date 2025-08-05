@@ -1,6 +1,6 @@
 -- name: CreateTask :one
-INSERT INTO tasks (project_id, title, description, worktree_id)
-VALUES (?, ?, ?, ?)
+INSERT INTO tasks (project_id, base_directory_id, title, description, status)
+VALUES (?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetTask :one
@@ -12,16 +12,17 @@ SELECT * FROM tasks
 WHERE project_id = ?
 ORDER BY title;
 
--- name: GetTaskWithWorktree :one
+-- name: GetTaskWithBaseDirectory :one
 SELECT 
     t.*,
-    w.base_directory_id,
-    w.path as worktree_path,
-    w.agent_tmux_id,
-    w.dev_server_tmux_id,
-    w.external_url as worktree_external_url
+    bd.path as base_directory_path,
+    bd.git_initialized,
+    bd.worktree_setup_commands,
+    bd.worktree_teardown_commands,
+    bd.dev_server_setup_commands,
+    bd.dev_server_teardown_commands
 FROM tasks t
-LEFT JOIN worktrees w ON t.worktree_id = w.id
+JOIN base_directories bd ON t.base_directory_id = bd.base_directory_id
 WHERE t.id = ?;
 
 -- name: UpdateTask :one
@@ -29,7 +30,7 @@ UPDATE tasks
 SET 
     title = ?,
     description = ?,
-    worktree_id = ?,
+    status = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;

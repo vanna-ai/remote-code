@@ -155,8 +155,12 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 					baseDirs = append(baseDirs, dbBaseDirectoryToBaseDirectory(dbBaseDir))
 				}
 
-				// Get tasks for this project (simplified for now)
-				tasks := []Task{}
+				// Get tasks for this project
+				tasks, err := loadTasksForProject(ctx, dbProject.ID, baseDirs)
+				if err != nil {
+					log.Printf("Failed to get tasks for project %d: %v", dbProject.ID, err)
+					tasks = []Task{}
+				}
 
 				// Ensure arrays are never null
 				if baseDirs == nil {
@@ -202,8 +206,12 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 				baseDirs = append(baseDirs, dbBaseDirectoryToBaseDirectory(dbBaseDir))
 			}
 
-			// Get tasks (simplified for now)
-			tasks := []Task{}
+			// Get tasks for this project
+			tasks, err := loadTasksForProject(ctx, id, baseDirs)
+			if err != nil {
+				log.Printf("Failed to get tasks for project %d: %v", id, err)
+				tasks = []Task{}
+			}
 
 			// Ensure arrays are never null
 			if baseDirs == nil {
@@ -278,7 +286,7 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 		return
 	}
 	
-	_, err := strconv.ParseInt(pathParts[0], 10, 64)
+	projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
@@ -292,9 +300,10 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 	case "POST":
 		// Create a new task for this project
 		var createReq struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			Status      string `json:"status"`
+			Title           string `json:"title"`
+			Description     string `json:"description"`
+			Status          string `json:"status"`
+			BaseDirectoryId string `json:"baseDirectoryId"`
 		}
 		
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
@@ -302,15 +311,43 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 			return
 		}
 		
-		// For now, just return a mock task since the task table isn't fully implemented
-		mockTask := Task{
-			Title:       createReq.Title,
-			Description: createReq.Description,
-			Status:      createReq.Status,
-			Worktree:    Worktree{}, // Empty worktree for now
+		if createReq.BaseDirectoryId == "" {
+			http.Error(w, "Base directory ID is required", http.StatusBadRequest)
+			return
 		}
 		
-		json.NewEncoder(w).Encode(mockTask)
+		// Create the task (no worktree creation needed)
+		dbTask, err := queries.CreateTask(ctx, db.CreateTaskParams{
+			ProjectID:       projectID,
+			BaseDirectoryID: createReq.BaseDirectoryId,
+			Title:           createReq.Title,
+			Description:     createReq.Description,
+			Status:          createReq.Status,
+		})
+		if err != nil {
+			log.Printf("Failed to create task: %v", err)
+			http.Error(w, "Failed to create task", http.StatusInternalServerError)
+			return
+		}
+		
+		// Get the base directory info to include in response
+		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+		if err != nil {
+			http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
+			return
+		}
+		
+		var baseDirectory BaseDirectory
+		for _, dir := range dbBaseDirs {
+			if dir.BaseDirectoryID == createReq.BaseDirectoryId {
+				baseDirectory = dbBaseDirectoryToBaseDirectory(dir)
+				break
+			}
+		}
+		
+		// Convert to API model
+		task := dbTaskToTask(dbTask, baseDirectory)
+		json.NewEncoder(w).Encode(task)
 		
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -326,6 +363,13 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 	projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Check if we have a specific directory ID in the path (for DELETE operations)
+	if len(pathParts) >= 3 {
+		directoryIDParam := pathParts[2]
+		handleSingleBaseDirectoryAPI(w, r, ctx, projectID, directoryIDParam)
 		return
 	}
 	
@@ -382,6 +426,69 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 		
 		result := dbBaseDirectoryToBaseDirectory(dbBaseDir)
 		json.NewEncoder(w).Encode(result)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func loadTasksForProject(ctx context.Context, projectID int64, baseDirs []BaseDirectory) ([]Task, error) {
+	dbTasks, err := queries.GetTasksByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Create a map for fast base directory lookup
+	baseDirMap := make(map[string]BaseDirectory)
+	for _, dir := range baseDirs {
+		baseDirMap[dir.BaseDirectoryId] = dir
+	}
+	
+	var tasks []Task
+	for _, dbTask := range dbTasks {
+		baseDir, exists := baseDirMap[dbTask.BaseDirectoryID]
+		if !exists {
+			// Skip tasks with missing base directories
+			continue
+		}
+		tasks = append(tasks, dbTaskToTask(dbTask, baseDir))
+	}
+	
+	return tasks, nil
+}
+
+func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, projectID int64, directoryIDParam string) {
+	switch r.Method {
+	case "DELETE":
+		// Find the directory by base_directory_id and project_id
+		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+		if err != nil {
+			http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
+			return
+		}
+		
+		var directoryToDelete *db.BaseDirectory
+		for _, dir := range dbBaseDirs {
+			if dir.BaseDirectoryID == directoryIDParam {
+				directoryToDelete = &dir
+				break
+			}
+		}
+		
+		if directoryToDelete == nil {
+			http.Error(w, "Base directory not found", http.StatusNotFound)
+			return
+		}
+		
+		// Delete the directory
+		err = queries.DeleteBaseDirectory(ctx, directoryToDelete.ID)
+		if err != nil {
+			log.Printf("Failed to delete base directory %d: %v", directoryToDelete.ID, err)
+			http.Error(w, "Failed to delete base directory", http.StatusInternalServerError)
+			return
+		}
+		
+		w.WriteHeader(http.StatusNoContent)
 		
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

@@ -58,13 +58,27 @@ CREATE TABLE IF NOT EXISTS worktrees (
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
+    base_directory_id TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    worktree_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'todo',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (worktree_id) REFERENCES worktrees(id) ON DELETE SET NULL
+    FOREIGN KEY (base_directory_id) REFERENCES base_directories(base_directory_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS task_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    agent_id INTEGER NOT NULL,
+    worktree_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+    FOREIGN KEY (worktree_id) REFERENCES worktrees(id) ON DELETE CASCADE
 );
 
 -- Indexes for better performance
@@ -74,4 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_base_directories_project_id ON base_directories(p
 CREATE INDEX IF NOT EXISTS idx_base_directories_base_directory_id ON base_directories(base_directory_id);
 CREATE INDEX IF NOT EXISTS idx_worktrees_base_directory_id ON worktrees(base_directory_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_worktree_id ON tasks(worktree_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_base_directory_id ON tasks(base_directory_id);
+CREATE INDEX IF NOT EXISTS idx_task_executions_task_id ON task_executions(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_executions_agent_id ON task_executions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_task_executions_worktree_id ON task_executions(worktree_id);
