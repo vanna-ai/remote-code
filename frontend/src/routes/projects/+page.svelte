@@ -158,7 +158,7 @@
 		{:else}
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 				{#each projects as project}
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-blue-400 transition-colors">
+					<a href="/projects/{project.id || encodeURIComponent(project.name)}" class="block bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-blue-400 hover:bg-gray-750 transition-colors cursor-pointer">
 						<div class="flex items-center gap-3 mb-4">
 							<div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
 								<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -184,14 +184,11 @@
 						</div>
 
 						<div class="flex gap-2">
-							<button class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm transition-colors">
-								Open
-							</button>
-							<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors">
-								Settings
-							</button>
+							<div class="flex-1 bg-blue-500 text-white px-3 py-2 rounded text-sm text-center">
+								Open Project
+							</div>
 						</div>
-					</div>
+					</a>
 				{/each}
 			</div>
 		{/if}

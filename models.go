@@ -15,6 +15,7 @@ type Root struct {
 
 // Project represents a project configuration
 type Project struct {
+	ID              int64           `json:"id"`
 	Name            string          `yaml:"name" json:"name"`
 	BaseDirectories []BaseDirectory `yaml:"base_directories" json:"base_directories"`
 	Tasks           []Task          `yaml:"tasks" json:"tasks"`
@@ -44,6 +45,7 @@ type Worktree struct {
 type Task struct {
 	Title       string   `yaml:"title" json:"title"`
 	Description string   `yaml:"description" json:"description"`
+	Status      string   `json:"status,omitempty"` // For Kanban board (todo, in_progress, done)
 	Worktree    Worktree `yaml:"worktree" json:"worktree"`
 }
 

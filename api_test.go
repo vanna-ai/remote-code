@@ -244,3 +244,60 @@ func TestProjectsAPI_ArraysNotNull(t *testing.T) {
 		t.Errorf("tasks should not be null, should be an empty array")
 	}
 }
+
+func TestProjectTasksAPI_GET(t *testing.T) {
+	setupTestDB(t)
+	
+	req := httptest.NewRequest("GET", "/api/projects/1/tasks", nil)
+	w := httptest.NewRecorder()
+	
+	handleAPI(w, req)
+	
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+	
+	var tasks []Task
+	if err := json.Unmarshal(w.Body.Bytes(), &tasks); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
+	
+	// Should return empty array for now
+	if len(tasks) != 0 {
+		t.Errorf("Expected empty tasks array, got %d tasks", len(tasks))
+	}
+}
+
+func TestProjectTasksAPI_POST(t *testing.T) {
+	setupTestDB(t)
+	
+	taskData := map[string]interface{}{
+		"title":       "Test Task",
+		"description": "Test task description",
+		"status":      "todo",
+	}
+	
+	jsonData, _ := json.Marshal(taskData)
+	req := httptest.NewRequest("POST", "/api/projects/1/tasks", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	
+	handleAPI(w, req)
+	
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d. Response: %s", w.Code, w.Body.String())
+	}
+	
+	var task Task
+	if err := json.Unmarshal(w.Body.Bytes(), &task); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
+	
+	if task.Title != "Test Task" {
+		t.Errorf("Expected task title 'Test Task', got '%s'", task.Title)
+	}
+	
+	if task.Status != "todo" {
+		t.Errorf("Expected task status 'todo', got '%s'", task.Status)
+	}
+}

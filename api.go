@@ -114,17 +114,25 @@ func handleRootsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 }
 
 func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	// Handle tasks sub-resource: /api/projects/{id}/tasks
+	if len(pathParts) >= 2 && pathParts[1] == "tasks" {
+		handleProjectTasksAPI(w, r, ctx, pathParts)
+		return
+	}
+	
 	switch r.Method {
 	case "GET":
 		if len(pathParts) == 0 {
 			// List all projects
 			dbProjects, err := queries.GetProjectsByRootID(ctx, 1) // Use default root_id for now
 			if err != nil {
-				http.Error(w, "Failed to get projects", http.StatusInternalServerError)
+				// If root doesn't exist, return empty array instead of error
+				log.Printf("No projects found for root_id 1: %v", err)
+				json.NewEncoder(w).Encode([]Project{})
 				return
 			}
 
-			var projects []Project
+			projects := make([]Project, 0)
 			for _, dbProject := range dbProjects {
 				// Get base directories for this project
 				dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, dbProject.ID)
@@ -151,6 +159,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 				}
 				
 				project := Project{
+					ID:              dbProject.ID,
 					Name:            dbProject.Name,
 					BaseDirectories: baseDirs,
 					Tasks:           tasks,
@@ -197,6 +206,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 			}
 
 			result := Project{
+				ID:              project.ID,
 				Name:            project.Name,
 				BaseDirectories: baseDirs,
 				Tasks:           tasks,
@@ -225,6 +235,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 		}
 
 		result := Project{
+			ID:              project.ID,
 			Name:            project.Name,
 			BaseDirectories: []BaseDirectory{},
 			Tasks:           []Task{},
@@ -251,4 +262,49 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 
 func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Tasks API not implemented yet"})
+}
+
+func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if len(pathParts) < 2 {
+		http.Error(w, "Project ID required", http.StatusBadRequest)
+		return
+	}
+	
+	_, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	
+	switch r.Method {
+	case "GET":
+		// Get tasks for project - for now return empty array as tasks aren't fully implemented
+		json.NewEncoder(w).Encode([]Task{})
+		
+	case "POST":
+		// Create a new task for this project
+		var createReq struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Status      string `json:"status"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		// For now, just return a mock task since the task table isn't fully implemented
+		mockTask := Task{
+			Title:       createReq.Title,
+			Description: createReq.Description,
+			Status:      createReq.Status,
+			Worktree:    Worktree{}, // Empty worktree for now
+		}
+		
+		json.NewEncoder(w).Encode(mockTask)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
