@@ -25,7 +25,11 @@ func main() {
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "index.html")
+	if r.URL.Path == "/" {
+		http.ServeFile(w, r, "static/index.html")
+	} else {
+		http.ServeFile(w, r, "static"+r.URL.Path)
+	}
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
