@@ -1,10 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"io"
 	"log"
 	"net/http"
 	"os/exec"
+
+	"web-terminal/db"
 
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
@@ -16,9 +19,18 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var database *sql.DB
+var queries *db.Queries
+
 func main() {
+	// Initialize database
+	database, queries = initDatabase()
+	defer database.Close()
+
+	// Setup HTTP routes
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", handleWebSocket)
+	http.HandleFunc("/api/", handleAPI)
 
 	log.Println("Server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
