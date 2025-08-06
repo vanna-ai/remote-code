@@ -237,7 +237,7 @@
 							<div class="flex items-center gap-4 text-sm text-gray-400">
 								<span>Created: {formatTime(sessionInfo.created)}</span>
 								{#if sessionInfo.is_task}
-									<span>Task ID: <span class="text-yellow-400 font-mono">{sessionInfo.task_id}</span></span>
+									<span>Task: <span class="text-yellow-400 font-mono">{sessionInfo.task_name || `ID: ${sessionInfo.task_id}`}</span></span>
 									<span>Agent: <span class="text-yellow-400 font-mono">{sessionInfo.agent_name || `ID: ${sessionInfo.agent_id}`}</span></span>
 								{/if}
 							</div>

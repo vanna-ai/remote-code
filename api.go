@@ -199,6 +199,7 @@ type TmuxSession struct {
 	Created   string `json:"created"`
 	Preview   string `json:"preview"`
 	TaskID    *int64 `json:"task_id,omitempty"`
+	TaskName  *string `json:"task_name,omitempty"`
 	AgentID   *int64 `json:"agent_id,omitempty"`
 	AgentName *string `json:"agent_name,omitempty"`
 	IsTask    bool   `json:"is_task"`
@@ -254,6 +255,10 @@ func getTmuxSessions() ([]TmuxSession, error) {
 			if len(parts) >= 4 {
 				if taskID, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
 					session.TaskID = &taskID
+					// Look up task name
+					if task, err := queries.GetTask(context.Background(), taskID); err == nil {
+						session.TaskName = &task.Title
+					}
 				}
 				if agentID, err := strconv.ParseInt(parts[3], 10, 64); err == nil {
 					session.AgentID = &agentID
