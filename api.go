@@ -812,7 +812,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 	// Function to send command and wait
 	sendCommandAndWait := func(command string, description string) error {
 		log.Printf("Executing %s: %s", description, command)
-		cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, command+"\r")
+		cmd := exec.Command("tmux", "send-keys", "-t", sessionName, command, "Enter")
 		err := cmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to send %s command: %v", description, err)
@@ -865,9 +865,23 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		// Create the task prompt to send to the agent
 		taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
 		
-		// Send the task prompt to the agent session
-		if err := sendCommandAndWait(taskPrompt, "task prompt"); err != nil {
+		// Send the task prompt to the agent session with agent-specific handling
+		log.Printf("Sending initial task prompt to agent session: %s", taskPrompt)
+		
+		// Send the text first
+		cmd := exec.Command("tmux", "send-keys", "-t", sessionName, taskPrompt)
+		err := cmd.Run()
+		if err != nil {
 			log.Printf("Warning: Failed to send task prompt: %v", err)
+			return
+		}
+		
+		// Small delay for agent debouncing, then send Enter
+		time.Sleep(100 * time.Millisecond)
+		enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
+		err = enterCmd.Run()
+		if err != nil {
+			log.Printf("Warning: Failed to send Enter for task prompt: %v", err)
 		}
 	}()
 	
@@ -941,11 +955,23 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 	
 	// Send the input to the tmux session
 	log.Printf("Sending input to session %s: %s", sessionName, inputReq.Input)
-	cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, inputReq.Input+"\r")
+	
+	// Send the text first
+	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, inputReq.Input)
 	err = cmd.Run()
 	if err != nil {
 		log.Printf("Failed to send input to tmux session: %v", err)
 		http.Error(w, "Failed to send input to session", http.StatusInternalServerError)
+		return
+	}
+	
+	// Small delay for agent debouncing, then send Enter
+	time.Sleep(100 * time.Millisecond)
+	enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
+	err = enterCmd.Run()
+	if err != nil {
+		log.Printf("Failed to send Enter to tmux session: %v", err)
+		http.Error(w, "Failed to send Enter to session", http.StatusInternalServerError)
 		return
 	}
 	
@@ -1011,11 +1037,23 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 	
 	// Send the task prompt to the tmux session
 	log.Printf("Re-sending task prompt to session %s", sessionName)
-	cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, taskPrompt+"\r")
+	
+	// Send the text first
+	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, taskPrompt)
 	err = cmd.Run()
 	if err != nil {
 		log.Printf("Failed to send task prompt to tmux session: %v", err)
 		http.Error(w, "Failed to send task prompt to session", http.StatusInternalServerError)
+		return
+	}
+	
+	// Small delay for agent debouncing, then send Enter
+	time.Sleep(100 * time.Millisecond)
+	enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
+	err = enterCmd.Run()
+	if err != nil {
+		log.Printf("Failed to send Enter to tmux session: %v", err)
+		http.Error(w, "Failed to send Enter to session", http.StatusInternalServerError)
 		return
 	}
 	
