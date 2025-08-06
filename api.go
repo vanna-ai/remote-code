@@ -266,6 +266,12 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 
 // Placeholder handlers for other endpoints
 func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	// Handle specific agent operations: /api/agents/{id}
+	if len(pathParts) > 0 && pathParts[0] != "detect" {
+		handleSingleAgentAPI(w, r, ctx, pathParts)
+		return
+	}
+	
 	switch r.Method {
 	case "GET":
 		if len(pathParts) > 0 && pathParts[0] == "detect" {
@@ -282,9 +288,10 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			return
 		}
 		
-		var agents []Agent
+		agents := make([]Agent, 0)
 		for _, dbAgent := range dbAgents {
 			agents = append(agents, Agent{
+				ID:      dbAgent.ID,
 				Name:    dbAgent.Name,
 				Command: dbAgent.Command,
 				Params:  dbAgent.Params,
@@ -320,6 +327,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 		}
 		
 		result := Agent{
+			ID:      agent.ID,
 			Name:    agent.Name,
 			Command: agent.Command,
 			Params:  agent.Params,
@@ -364,6 +372,68 @@ func handleAgentDetection(w http.ResponseWriter, r *http.Request, ctx context.Co
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"agents": availableAgents,
 	})
+}
+
+func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if len(pathParts) == 0 {
+		http.Error(w, "Agent ID required", http.StatusBadRequest)
+		return
+	}
+	
+	agentID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid agent ID", http.StatusBadRequest)
+		return
+	}
+	
+	switch r.Method {
+	case "PUT":
+		// Update agent
+		var updateReq struct {
+			Name    string `json:"name"`
+			Command string `json:"command"`
+			Params  string `json:"params"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		updatedAgent, err := queries.UpdateAgent(ctx, db.UpdateAgentParams{
+			ID:      agentID,
+			Name:    updateReq.Name,
+			Command: updateReq.Command,
+			Params:  updateReq.Params,
+		})
+		if err != nil {
+			log.Printf("Failed to update agent: %v", err)
+			http.Error(w, "Failed to update agent", http.StatusInternalServerError)
+			return
+		}
+		
+		result := Agent{
+			ID:      updatedAgent.ID,
+			Name:    updatedAgent.Name,
+			Command: updatedAgent.Command,
+			Params:  updatedAgent.Params,
+		}
+		json.NewEncoder(w).Encode(result)
+		
+	case "DELETE":
+		// Delete agent
+		err := queries.DeleteAgent(ctx, agentID)
+		if err != nil {
+			log.Printf("Failed to delete agent: %v", err)
+			http.Error(w, "Failed to delete agent", http.StatusInternalServerError)
+			return
+		}
+		
+		w.WriteHeader(http.StatusNoContent)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

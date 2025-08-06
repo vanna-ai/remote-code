@@ -6,6 +6,8 @@
 	let loading = true;
 	let detecting = false;
 	let showAddAgentForm = false;
+	let showConfigureForm = false;
+	let configuringAgent = null;
 	let newAgent = { name: '', command: '', params: '' };
 
 	onMount(async () => {
@@ -85,6 +87,72 @@
 			command: detectedAgent.command,
 			params: ''
 		});
+	}
+	
+	async function removeAgent(agentId) {
+		if (!confirm('Are you sure you want to remove this agent? This action cannot be undone.')) {
+			return;
+		}
+		
+		try {
+			const response = await fetch(`/api/agents/${agentId}`, {
+				method: 'DELETE'
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			
+			// Remove the agent from local state
+			agents = agents.filter(agent => agent.id !== agentId);
+		} catch (error) {
+			console.error('Failed to remove agent:', error);
+			alert('Failed to remove agent. Please try again.');
+		}
+	}
+	
+	function startConfiguring(agent) {
+		configuringAgent = { ...agent };
+		showConfigureForm = true;
+	}
+	
+	async function updateAgent() {
+		try {
+			const response = await fetch(`/api/agents/${configuringAgent.id}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					name: configuringAgent.name,
+					command: configuringAgent.command,
+					params: configuringAgent.params
+				})
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			
+			const updatedAgent = await response.json();
+			
+			// Update the agent in local state
+			agents = agents.map(agent => 
+				agent.id === updatedAgent.id ? updatedAgent : agent
+			);
+			
+			// Close form
+			showConfigureForm = false;
+			configuringAgent = null;
+		} catch (error) {
+			console.error('Failed to update agent:', error);
+			alert('Failed to update agent. Please try again.');
+		}
+	}
+	
+	function cancelConfigure() {
+		showConfigureForm = false;
+		configuringAgent = null;
 	}
 </script>
 
@@ -190,6 +258,68 @@
 			</div>
 		{/if}
 
+		<!-- Configure Agent Form -->
+		{#if showConfigureForm && configuringAgent}
+			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+				<h3 class="text-xl font-semibold text-white mb-4">Configure Agent</h3>
+				<form on:submit|preventDefault={updateAgent} class="space-y-4">
+					<div>
+						<label for="configure-name" class="block text-sm font-medium text-gray-300 mb-2">
+							Agent Name
+						</label>
+						<input 
+							id="configure-name"
+							type="text" 
+							bind:value={configuringAgent.name}
+							placeholder="e.g., Claude Assistant"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+							required
+						/>
+					</div>
+					<div>
+						<label for="configure-command" class="block text-sm font-medium text-gray-300 mb-2">
+							Command
+						</label>
+						<input 
+							id="configure-command"
+							type="text" 
+							bind:value={configuringAgent.command}
+							placeholder="e.g., claude"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+							required
+						/>
+					</div>
+					<div>
+						<label for="configure-params" class="block text-sm font-medium text-gray-300 mb-2">
+							Parameters (optional)
+						</label>
+						<input 
+							id="configure-params"
+							type="text" 
+							bind:value={configuringAgent.params}
+							placeholder="e.g., --model claude-3-sonnet"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+						/>
+					</div>
+					<div class="flex gap-3">
+						<button 
+							type="submit"
+							class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Update Agent
+						</button>
+						<button 
+							type="button"
+							on:click={cancelConfigure}
+							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
+			</div>
+		{/if}
+
 		<!-- Loading State -->
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
@@ -232,10 +362,16 @@
 								</div>
 
 								<div class="flex gap-2">
-									<button class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm transition-colors">
+									<button 
+										on:click={() => startConfiguring(agent)}
+										class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm transition-colors"
+									>
 										Configure
 									</button>
-									<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors">
+									<button 
+										on:click={() => removeAgent(agent.id)}
+										class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors"
+									>
 										Remove
 									</button>
 								</div>

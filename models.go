@@ -61,6 +61,7 @@ type TaskExecution struct {
 
 // Agent represents an available agent
 type Agent struct {
+	ID      int64  `json:"id"`
 	Name    string `yaml:"name" json:"name"`
 	Command string `yaml:"command" json:"command"`
 	Params  string `yaml:"params" json:"params"`
