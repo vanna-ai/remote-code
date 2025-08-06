@@ -29,6 +29,9 @@
 	let availableAgents = [];
 	let selectedAgents = [];
 	let executingTask = false;
+	let showEditTaskModal = false;
+	let editingTask = null;
+	let editTaskForm = { title: '', description: '', status: '', baseDirectoryId: '' };
 	let taskExecutions = new Map(); // Map of taskId to array of executions
 	let deletingTasks = new Set();
 	let updatingTasks = new Set();
@@ -295,6 +298,23 @@
 		availableAgents = [];
 	}
 	
+	function openEditTaskModal(task) {
+		editingTask = task;
+		editTaskForm = {
+			title: task.title,
+			description: task.description,
+			status: task.status,
+			baseDirectoryId: task.baseDirectory?.base_directory_id || ''
+		};
+		showEditTaskModal = true;
+	}
+	
+	function closeEditTaskModal() {
+		editingTask = null;
+		showEditTaskModal = false;
+		editTaskForm = { title: '', description: '', status: '', baseDirectoryId: '' };
+	}
+	
 	async function loadAvailableAgents() {
 		try {
 			const response = await fetch('/api/agents');
@@ -433,6 +453,46 @@
 		} finally {
 			// Remove from updating set
 			updatingTasks = new Set([...updatingTasks].filter(id => id !== task.id));
+		}
+	}
+
+	async function saveTaskEdit() {
+		if (!editingTask || !editTaskForm.title.trim()) return;
+		
+		try {
+			// Add to updating set to show loading state
+			updatingTasks = new Set([...updatingTasks, editingTask.id]);
+			
+			const response = await fetch(`/api/tasks/${editingTask.id}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					title: editTaskForm.title,
+					description: editTaskForm.description,
+					status: editTaskForm.status
+				})
+			});
+			
+			if (response.ok) {
+				const updatedTask = await response.json();
+				console.log('Task updated:', updatedTask);
+				
+				// Reload the entire project to ensure consistency
+				await loadProject();
+				
+				closeEditTaskModal();
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to update task: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to update task:', err);
+			alert('Failed to update task');
+		} finally {
+			// Remove from updating set
+			updatingTasks = new Set([...updatingTasks].filter(id => id !== editingTask.id));
 		}
 	}
 
@@ -845,6 +905,18 @@
 												{task.title}
 											</h4>
 											<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+												<!-- Edit Button -->
+												<button 
+													on:click|stopPropagation={() => openEditTaskModal(task)}
+													class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-1 transition-colors"
+													title="Edit task"
+													aria-label="Edit task"
+												>
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+													</svg>
+												</button>
+												
 												<!-- Status Change Dropdown -->
 												<div class="relative">
 													<select 
@@ -990,6 +1062,18 @@
 											
 											<!-- Task Management Buttons (hidden by default, shown on hover) -->
 											<div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+												<!-- Edit Button -->
+												<button 
+													on:click|stopPropagation={() => openEditTaskModal(task)}
+													class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-2 transition-colors"
+													title="Edit task"
+													aria-label="Edit task"
+												>
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+													</svg>
+												</button>
+												
 												<!-- Status Change Dropdown -->
 												<select 
 													value={task.status}
@@ -1193,6 +1277,114 @@
 					{/if}
 				</div>
 			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Task Edit Modal -->
+{#if showEditTaskModal && editingTask}
+	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeEditTaskModal}>
+		<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4" on:click|stopPropagation>
+			<div class="flex items-center justify-between mb-4">
+				<h2 class="text-xl font-semibold text-white">Edit Task</h2>
+				<button 
+					on:click={closeEditTaskModal}
+					class="text-gray-400 hover:text-white transition-colors"
+					aria-label="Close modal"
+				>
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+					</svg>
+				</button>
+			</div>
+			
+			<form on:submit|preventDefault={saveTaskEdit} class="space-y-4">
+				<div>
+					<label for="edit-task-title" class="block text-sm font-medium text-gray-300 mb-2">
+						Task Title
+					</label>
+					<input 
+						id="edit-task-title"
+						type="text" 
+						bind:value={editTaskForm.title}
+						placeholder="Enter task title"
+						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+						required
+					/>
+				</div>
+				
+				<div>
+					<label for="edit-task-description" class="block text-sm font-medium text-gray-300 mb-2">
+						Description
+					</label>
+					<textarea 
+						id="edit-task-description"
+						bind:value={editTaskForm.description}
+						placeholder="Enter task description"
+						rows="4"
+						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+					></textarea>
+				</div>
+				
+				<div>
+					<label for="edit-task-status" class="block text-sm font-medium text-gray-300 mb-2">
+						Status
+					</label>
+					<select 
+						id="edit-task-status"
+						bind:value={editTaskForm.status}
+						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+					>
+						{#each columns as column}
+							<option value={column.id}>{column.title}</option>
+						{/each}
+					</select>
+				</div>
+				
+				<div>
+					<label for="edit-task-base-directory" class="block text-sm font-medium text-gray-300 mb-2">
+						Base Directory
+					</label>
+					<select 
+						id="edit-task-base-directory"
+						bind:value={editTaskForm.baseDirectoryId}
+						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+						required
+					>
+						<option value="">Select a base directory...</option>
+						{#if project && project.baseDirectories}
+							{#each project.baseDirectories as directory}
+								<option value={directory.base_directory_id}>{directory.path}</option>
+							{/each}
+						{/if}
+					</select>
+				</div>
+				
+				<div class="flex gap-3 pt-4">
+					<button 
+						type="submit"
+						disabled={updatingTasks.has(editingTask.id)}
+						class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+					>
+						{#if updatingTasks.has(editingTask.id)}
+							<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+							Saving...
+						{:else}
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+							</svg>
+							Save Changes
+						{/if}
+					</button>
+					<button 
+						type="button"
+						on:click={closeEditTaskModal}
+						class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+					>
+						Cancel
+					</button>
+				</div>
+			</form>
 		</div>
 	</div>
 {/if}
