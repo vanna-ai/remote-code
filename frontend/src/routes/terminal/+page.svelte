@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	const breadcrumbSegments = [
@@ -117,9 +117,11 @@
 		fitAddon.fit();
 
 		// Create WebSocket connection
+		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
+		const host = $page.url.host;
 		const wsUrl = sessionType === 'global' 
-			? 'ws://localhost:8080/ws'
-			: `ws://localhost:8080/ws?session=${selectedSession.name}`;
+			? `${wsProtocol}//${host}/ws`
+			: `${wsProtocol}//${host}/ws?session=${selectedSession.name}`;
 		
 		ws = new WebSocket(wsUrl);
 

@@ -189,7 +189,8 @@
 
 		// Create WebSocket connection for the task execution session
 		const sessionName = `task_${execution.task_id}_agent_${execution.agent_id}`;
-		const wsUrl = `ws://localhost:8080/ws?session=${sessionName}`;
+		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
+		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${sessionName}`;
 		ws = new WebSocket(wsUrl);
 
 		ws.onopen = function() {
@@ -269,7 +270,8 @@
 
 		// Create WebSocket connection for the dev server session
 		const devSessionName = `dev_${execution.worktree_id}`;
-		const wsUrl = `ws://localhost:8080/ws?session=${devSessionName}`;
+		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
+		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${devSessionName}`;
 		devWs = new WebSocket(wsUrl);
 
 		devWs.onopen = function() {

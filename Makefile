@@ -24,4 +24,6 @@ clean:
 	rm -f remote-code-test*.db
 
 run: build
+	@echo "Killing any process running on port 8080..."
+	@lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
 	./remote-code
