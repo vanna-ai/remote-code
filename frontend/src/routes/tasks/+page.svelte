@@ -192,7 +192,7 @@
 						<div class="flex items-start justify-between mb-4">
 							<div class="flex-1">
 								<div class="flex items-center gap-3 mb-2">
-									<h3 class="text-lg font-semibold text-white">{getTaskTitle(execution.task_id)}</h3>
+									<h3 class="text-lg font-semibold text-white">{execution.task_title || `Task ${execution.task_id}`}</h3>
 									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getStatusColor(execution.status)}">
 										{getStatusText(execution.status)}
 									</span>
@@ -202,7 +202,7 @@
 										<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
 										</svg>
-										Agent: {getAgentName(execution.agent_id)}
+										Agent: {execution.agent_name || `Agent ${execution.agent_id}`}
 									</div>
 									<div class="flex items-center">
 										<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

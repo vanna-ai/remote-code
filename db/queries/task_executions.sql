@@ -45,8 +45,14 @@ WHERE id = ?
 RETURNING *;
 
 -- name: ListTaskExecutions :many
-SELECT * FROM task_executions
-ORDER BY created_at DESC;
+SELECT 
+    te.*,
+    t.title as task_title,
+    a.name as agent_name
+FROM task_executions te
+JOIN tasks t ON te.task_id = t.id
+JOIN agents a ON te.agent_id = a.id
+ORDER BY te.created_at DESC;
 
 -- name: DeleteTaskExecution :exec
 DELETE FROM task_executions WHERE id = ?;

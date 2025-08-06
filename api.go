@@ -656,7 +656,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		
 		// Ensure we return empty array instead of null
 		if executions == nil {
-			executions = []db.TaskExecution{}
+			executions = []db.ListTaskExecutionsRow{}
 		}
 		
 		json.NewEncoder(w).Encode(executions)
