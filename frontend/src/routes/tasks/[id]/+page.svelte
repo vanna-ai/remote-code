@@ -26,6 +26,9 @@
 	let error = null;
 	let devServerRunning = false;
 	let showDevTerminal = false;
+	let inputText = '';
+	let isSendingInput = false;
+	let isResendingTask = false;
 
 	$: executionId = $page.params.id;
 
@@ -373,6 +376,67 @@
 	function formatDate(dateString) {
 		return new Date(dateString).toLocaleString();
 	}
+
+	async function sendInputToSession() {
+		if (!inputText.trim() || isSendingInput) return;
+		
+		try {
+			isSendingInput = true;
+			const response = await fetch(`/api/task-executions/${executionId}/send-input`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					input: inputText
+				})
+			});
+			
+			if (response.ok) {
+				inputText = ''; // Clear the input
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to send input: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to send input:', err);
+			alert('Failed to send input to session');
+		} finally {
+			isSendingInput = false;
+		}
+	}
+
+	async function resendTaskToSession() {
+		if (isResendingTask) return;
+		
+		try {
+			isResendingTask = true;
+			const response = await fetch(`/api/task-executions/${executionId}/resend-task`, {
+				method: 'POST'
+			});
+			
+			if (response.ok) {
+				const result = await response.json();
+				// Optional: Show a success message
+				console.log('Task re-sent successfully:', result);
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to re-send task: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to re-send task:', err);
+			alert('Failed to re-send task to session');
+		} finally {
+			isResendingTask = false;
+		}
+	}
+
+	function handleInputKeydown(event) {
+		if (event.key === 'Enter' && !event.shiftKey) {
+			event.preventDefault();
+			sendInputToSession();
+		}
+	}
 </script>
 
 <svelte:head>
@@ -563,7 +627,25 @@
 				<!-- Task Description -->
 				{#if execution.task_description}
 					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-						<h3 class="text-lg font-semibold text-white mb-3">Task Description</h3>
+						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+							<h3 class="text-lg font-semibold text-white">Task Description</h3>
+							{#if execution.status === 'running'}
+								<button 
+									on:click={resendTaskToSession}
+									disabled={isResendingTask}
+									class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+								>
+									{#if isResendingTask}
+										<div class="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+									{:else}
+										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+										</svg>
+									{/if}
+									{isResendingTask ? 'Sending...' : 'Re-Send Task'}
+								</button>
+							{/if}
+						</div>
 						<p class="text-gray-300">{execution.task_description}</p>
 					</div>
 				{/if}
@@ -591,7 +673,7 @@
 					<div 
 						id="terminal" 
 						bind:this={terminalElement}
-						class="w-full h-[60vh] focus:outline-none"
+						class="w-full h-[50vh] sm:h-[60vh] focus:outline-none"
 					></div>
 				</div>
 			</div>
@@ -599,6 +681,45 @@
 			<div class="mt-4 text-sm text-gray-400 text-center">
 				<p>Terminal connected to task execution session</p>
 			</div>
+
+			<!-- Input Section for Sending Text to Session -->
+			{#if execution.status === 'running'}
+				<div class="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-4">
+					<h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+						</svg>
+						Send Input to Session
+					</h4>
+					<div class="flex flex-col sm:flex-row gap-2">
+						<input
+							type="text"
+							bind:value={inputText}
+							on:keydown={handleInputKeydown}
+							placeholder="Type a message and press Enter to send..."
+							disabled={isSendingInput}
+							class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+						/>
+						<button
+							on:click={sendInputToSession}
+							disabled={!inputText.trim() || isSendingInput}
+							class="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 min-w-[80px] sm:min-w-[80px] w-full sm:w-auto"
+						>
+							{#if isSendingInput}
+								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
+							{:else}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+								</svg>
+							{/if}
+							{isSendingInput ? '' : 'Send'}
+						</button>
+					</div>
+					<p class="text-xs text-gray-400 mt-2">
+						Send text input directly to the agent session. Press Enter or click Send.
+					</p>
+				</div>
+			{/if}
 
 			<!-- Dev Server Terminal -->
 			{#if showDevTerminal}
@@ -622,7 +743,7 @@
 						<div 
 							id="dev-terminal" 
 							bind:this={devTerminalElement}
-							class="w-full h-[50vh] focus:outline-none"
+							class="w-full h-[40vh] sm:h-[50vh] focus:outline-none"
 						></div>
 					</div>
 				</div>

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -597,6 +596,18 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 }
 
 func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	// Handle sub-endpoints like /api/task-executions/{id}/send-input
+	if len(pathParts) >= 2 && pathParts[1] == "send-input" {
+		handleSendInputToSession(w, r, ctx, pathParts)
+		return
+	}
+	
+	// Handle sub-endpoints like /api/task-executions/{id}/resend-task
+	if len(pathParts) >= 2 && pathParts[1] == "resend-task" {
+		handleResendTaskToSession(w, r, ctx, pathParts)
+		return
+	}
+	
 	switch r.Method {
 	case "GET":
 		// Handle individual task execution by ID
@@ -836,30 +847,6 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		}
 	}
 	
-	// Create a task file with the task details
-	taskContent := fmt.Sprintf(`Task: %s
-
-Description: %s
-
-Working directory: %s
-
-Instructions:
-- Use this directory as your working directory
-- Complete the task described above
-- The codebase should be available in this directory
-`, task.Title, task.Description, worktree.Path)
-	
-	taskFilePath := filepath.Join(worktree.Path, "TASK.md")
-	err = os.WriteFile(taskFilePath, []byte(taskContent), 0644)
-	if err != nil {
-		log.Printf("Failed to create task file: %v", err)
-	}
-	
-	// Show the task file in the terminal
-	if err := sendCommandAndWait(fmt.Sprintf("cat %s", taskFilePath), "show task file"); err != nil {
-		log.Printf("Warning: %v", err)
-	}
-	
 	// Start the agent command
 	agentCommand := fmt.Sprintf("%s %s", agent.Command, agent.Params)
 	if err := sendCommandAndWait(agentCommand, "agent command"); err != nil {
@@ -870,6 +857,19 @@ Instructions:
 	
 	// Update status to running
 	updateTaskExecutionStatus(ctx, executionID, "running")
+	
+	// Wait 3 seconds for the agent to start, then send the task title and description
+	go func() {
+		time.Sleep(3 * time.Second)
+		
+		// Create the task prompt to send to the agent
+		taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
+		
+		// Send the task prompt to the agent session
+		if err := sendCommandAndWait(taskPrompt, "task prompt"); err != nil {
+			log.Printf("Warning: Failed to send task prompt: %v", err)
+		}
+	}()
 	
 	log.Printf("Task execution %d started successfully in tmux session %s", executionID, sessionName)
 }
@@ -882,6 +882,152 @@ func updateTaskExecutionStatus(ctx context.Context, executionID int64, status st
 	if err != nil {
 		log.Printf("Failed to update task execution status: %v", err)
 	}
+}
+
+func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	if len(pathParts) < 1 {
+		http.Error(w, "Task execution ID required", http.StatusBadRequest)
+		return
+	}
+	
+	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Parse the request body
+	var inputReq struct {
+		Input string `json:"input"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&inputReq); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	if inputReq.Input == "" {
+		http.Error(w, "Input cannot be empty", http.StatusBadRequest)
+		return
+	}
+	
+	// Get the task execution to find the tmux session
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	if err != nil {
+		log.Printf("Failed to get task execution: %v", err)
+		http.Error(w, "Task execution not found", http.StatusNotFound)
+		return
+	}
+	
+	// Get the worktree to find the tmux session
+	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
+	if err != nil {
+		log.Printf("Failed to get worktree: %v", err)
+		http.Error(w, "Worktree not found", http.StatusNotFound)
+		return
+	}
+	
+	if !worktree.AgentTmuxID.Valid {
+		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
+		return
+	}
+	
+	sessionName := worktree.AgentTmuxID.String
+	
+	// Send the input to the tmux session
+	log.Printf("Sending input to session %s: %s", sessionName, inputReq.Input)
+	cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, inputReq.Input+"\r")
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("Failed to send input to tmux session: %v", err)
+		http.Error(w, "Failed to send input to session", http.StatusInternalServerError)
+		return
+	}
+	
+	// Return success response
+	response := map[string]interface{}{
+		"success": true,
+		"message": "Input sent to session successfully",
+		"session": sessionName,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	if len(pathParts) < 1 {
+		http.Error(w, "Task execution ID required", http.StatusBadRequest)
+		return
+	}
+	
+	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Get the task execution to find the task details and tmux session
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	if err != nil {
+		log.Printf("Failed to get task execution: %v", err)
+		http.Error(w, "Task execution not found", http.StatusNotFound)
+		return
+	}
+	
+	// Get the task details
+	task, err := queries.GetTask(ctx, execution.TaskID)
+	if err != nil {
+		log.Printf("Failed to get task: %v", err)
+		http.Error(w, "Task not found", http.StatusNotFound)
+		return
+	}
+	
+	// Get the worktree to find the tmux session
+	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
+	if err != nil {
+		log.Printf("Failed to get worktree: %v", err)
+		http.Error(w, "Worktree not found", http.StatusNotFound)
+		return
+	}
+	
+	if !worktree.AgentTmuxID.Valid {
+		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
+		return
+	}
+	
+	sessionName := worktree.AgentTmuxID.String
+	
+	// Create the task prompt to send to the agent
+	taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
+	
+	// Send the task prompt to the tmux session
+	log.Printf("Re-sending task prompt to session %s", sessionName)
+	cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, taskPrompt+"\r")
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("Failed to send task prompt to tmux session: %v", err)
+		http.Error(w, "Failed to send task prompt to session", http.StatusInternalServerError)
+		return
+	}
+	
+	// Return success response
+	response := map[string]interface{}{
+		"success":     true,
+		"message":     "Task prompt re-sent to session successfully",
+		"session":     sessionName,
+		"task_title":  task.Title,
+		"task_description": task.Description,
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
