@@ -69,7 +69,20 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	cmd := exec.Command("tmux", "new-session", "-A", "-s", "remote-code")
+	// Check if a specific session is requested
+	sessionName := r.URL.Query().Get("session")
+	
+	var cmd *exec.Cmd
+	if sessionName != "" {
+		// Attach to specific tmux session
+		log.Printf("Attaching to tmux session: %s", sessionName)
+		cmd = exec.Command("tmux", "attach-session", "-t", sessionName)
+	} else {
+		// Create or attach to global session for general terminal use
+		log.Printf("Creating/attaching to global terminal session")
+		cmd = exec.Command("tmux", "new-session", "-A", "-s", "remote-code")
+	}
+	
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start pty: %v", err)

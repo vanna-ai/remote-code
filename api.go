@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +52,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleWorktreesAPI(w, r, ctx, pathParts[1:])
 	case "tasks":
 		handleTasksAPI(w, r, ctx, pathParts[1:])
+	case "task-executions":
+		handleTaskExecutionsAPI(w, r, ctx, pathParts[1:])
+	case "tmux-sessions":
+		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -112,8 +119,98 @@ func handleRootsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 		json.NewEncoder(w).Encode(result)
 
 	default:
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleTmuxSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	switch r.Method {
+	case "GET":
+		// Get all tmux sessions
+		sessions, err := getTmuxSessions()
+		if err != nil {
+			log.Printf("Failed to get tmux sessions: %v", err)
+			http.Error(w, "Failed to get tmux sessions", http.StatusInternalServerError)
+			return
+		}
+		
+		json.NewEncoder(w).Encode(sessions)
+		
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+type TmuxSession struct {
+	Name     string `json:"name"`
+	Created  string `json:"created"`
+	Preview  string `json:"preview"`
+	TaskID   *int64 `json:"task_id,omitempty"`
+	AgentID  *int64 `json:"agent_id,omitempty"`
+	IsTask   bool   `json:"is_task"`
+}
+
+func getTmuxSessions() ([]TmuxSession, error) {
+	// Get list of tmux sessions
+	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{session_created}")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	
+	var sessions []TmuxSession
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		
+		parts := strings.Split(line, "|")
+		if len(parts) != 2 {
+			continue
+		}
+		
+		sessionName := parts[0]
+		created := parts[1]
+		
+		// Get preview of the session
+		preview := ""
+		previewCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-p")
+		if previewOutput, err := previewCmd.Output(); err == nil {
+			// Get last few lines
+			previewLines := strings.Split(strings.TrimSpace(string(previewOutput)), "\n")
+			if len(previewLines) > 10 {
+				previewLines = previewLines[len(previewLines)-10:]
+			}
+			preview = strings.Join(previewLines, "\n")
+		}
+		
+		session := TmuxSession{
+			Name:    sessionName,
+			Created: created,
+			Preview: preview,
+		}
+		
+		// Check if this is a task session
+		if strings.HasPrefix(sessionName, "task_") {
+			session.IsTask = true
+			// Parse task and agent IDs from session name (format: task_{taskId}_agent_{agentId})
+			parts := strings.Split(sessionName, "_")
+			if len(parts) >= 4 {
+				if taskID, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+					session.TaskID = &taskID
+				}
+				if agentID, err := strconv.ParseInt(parts[3], 10, 64); err == nil {
+					session.AgentID = &agentID
+				}
+			}
+		}
+		
+		sessions = append(sessions, session)
+	}
+	
+	return sessions, nil
 }
 
 func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
@@ -433,6 +530,219 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 		
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	switch r.Method {
+	case "GET":
+		// Get task executions, optionally filtered by task_id
+		taskIDStr := r.URL.Query().Get("task_id")
+		if taskIDStr != "" {
+			taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid task ID", http.StatusBadRequest)
+				return
+			}
+			
+			queries := db.New(database)
+			executions, err := queries.GetTaskExecutionsByTaskID(ctx, taskID)
+			if err != nil {
+				log.Printf("Failed to get task executions: %v", err)
+				http.Error(w, "Failed to get task executions", http.StatusInternalServerError)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(executions)
+			return
+		}
+		
+		// Get all task executions
+		queries := db.New(database)
+		executions, err := queries.ListTaskExecutions(ctx)
+		if err != nil {
+			log.Printf("Failed to list task executions: %v", err)
+			http.Error(w, "Failed to list task executions", http.StatusInternalServerError)
+			return
+		}
+		
+		json.NewEncoder(w).Encode(executions)
+		
+	case "POST":
+		// Create and start a new task execution
+		var createReq struct {
+			TaskId  int64 `json:"task_id"`
+			AgentId int64 `json:"agent_id"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		// Get the task details
+		dbTask, err := queries.GetTask(ctx, createReq.TaskId)
+		if err != nil {
+			log.Printf("Failed to get task: %v", err)
+			http.Error(w, "Task not found", http.StatusNotFound)
+			return
+		}
+		
+		// Get the agent details
+		dbAgent, err := queries.GetAgent(ctx, createReq.AgentId)
+		if err != nil {
+			log.Printf("Failed to get agent: %v", err)
+			http.Error(w, "Agent not found", http.StatusNotFound)
+			return
+		}
+		
+		// Create a unique worktree path for this execution
+		worktreePath := fmt.Sprintf("/tmp/task_%d_agent_%d_%d", createReq.TaskId, createReq.AgentId, time.Now().Unix())
+		
+		// Create the worktree
+		dbWorktree, err := queries.CreateWorktree(ctx, db.CreateWorktreeParams{
+			BaseDirectoryID: dbTask.BaseDirectoryID,
+			Path:            worktreePath,
+			AgentTmuxID:     sql.NullString{Valid: false},
+			DevServerTmuxID: sql.NullString{Valid: false},
+			ExternalUrl:     sql.NullString{Valid: false},
+		})
+		if err != nil {
+			log.Printf("Failed to create worktree: %v", err)
+			http.Error(w, "Failed to create worktree", http.StatusInternalServerError)
+			return
+		}
+		
+		// Create the task execution record
+		dbTaskExecution, err := queries.CreateTaskExecution(ctx, db.CreateTaskExecutionParams{
+			TaskID:     createReq.TaskId,
+			AgentID:    createReq.AgentId,
+			WorktreeID: dbWorktree.ID,
+			Status:     "starting",
+		})
+		if err != nil {
+			log.Printf("Failed to create task execution: %v", err)
+			http.Error(w, "Failed to create task execution", http.StatusInternalServerError)
+			return
+		}
+		
+		// Update task status to "in_progress" if it's not already
+		if dbTask.Status != "in_progress" {
+			_, err = queries.UpdateTask(ctx, db.UpdateTaskParams{
+				ID:          dbTask.ID,
+				Title:       dbTask.Title,
+				Description: dbTask.Description,
+				Status:      "in_progress",
+			})
+			if err != nil {
+				log.Printf("Failed to update task status: %v", err)
+			}
+		}
+		
+		// Start the execution in the background
+		go startTaskExecutionProcess(dbTaskExecution.ID, dbTask, dbAgent, dbWorktree)
+		
+		// Return the task execution details
+		result := map[string]interface{}{
+			"id":          dbTaskExecution.ID,
+			"task_id":     dbTaskExecution.TaskID,
+			"agent_id":    dbTaskExecution.AgentID,
+			"worktree_id": dbTaskExecution.WorktreeID,
+			"status":      dbTaskExecution.Status,
+		}
+		json.NewEncoder(w).Encode(result)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, worktree db.Worktree) {
+	ctx := context.Background()
+	
+	log.Printf("Starting task execution %d: Task '%s' with agent '%s'", executionID, task.Title, agent.Name)
+	
+	// Create the worktree directory
+	err := os.MkdirAll(worktree.Path, 0755)
+	if err != nil {
+		log.Printf("Failed to create worktree directory %s: %v", worktree.Path, err)
+		updateTaskExecutionStatus(ctx, executionID, "failed")
+		return
+	}
+	
+	// Generate a unique tmux session name
+	sessionName := fmt.Sprintf("task_%d_agent_%d", task.ID, agent.ID)
+	
+	// Start tmux session in the worktree directory
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktree.Path)
+	err = tmuxCmd.Run()
+	if err != nil {
+		log.Printf("Failed to start tmux session: %v", err)
+		updateTaskExecutionStatus(ctx, executionID, "failed")
+		return
+	}
+	
+	// Update worktree with tmux session info
+	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
+		ID:              worktree.ID,
+		Path:            worktree.Path,
+		AgentTmuxID:     sql.NullString{String: sessionName, Valid: true},
+		DevServerTmuxID: worktree.DevServerTmuxID,
+		ExternalUrl:     worktree.ExternalUrl,
+	})
+	if err != nil {
+		log.Printf("Failed to update worktree with tmux session: %v", err)
+	}
+	
+	// Create a task file with the task details
+	taskContent := fmt.Sprintf(`Task: %s
+
+Description: %s
+
+Working directory: %s
+
+Instructions:
+- Use this directory as your working directory
+- Complete the task described above
+- The codebase should be available in this directory
+`, task.Title, task.Description, worktree.Path)
+	
+	taskFilePath := filepath.Join(worktree.Path, "TASK.md")
+	err = os.WriteFile(taskFilePath, []byte(taskContent), 0644)
+	if err != nil {
+		log.Printf("Failed to create task file: %v", err)
+	}
+	
+	// Show the task file in the terminal
+	tmuxSendCmd := exec.Command("tmux", "send-keys", "-t", sessionName, fmt.Sprintf("cat %s", taskFilePath), "Enter")
+	err = tmuxSendCmd.Run()
+	if err != nil {
+		log.Printf("Failed to show task file in tmux: %v", err)
+	}
+	
+	// Start the agent command
+	agentCommand := fmt.Sprintf("%s %s", agent.Command, agent.Params)
+	tmuxAgentCmd := exec.Command("tmux", "send-keys", "-t", sessionName, agentCommand, "Enter")
+	err = tmuxAgentCmd.Run()
+	if err != nil {
+		log.Printf("Failed to start agent command in tmux: %v", err)
+		updateTaskExecutionStatus(ctx, executionID, "failed")
+		return
+	}
+	
+	// Update status to running
+	updateTaskExecutionStatus(ctx, executionID, "running")
+	
+	log.Printf("Task execution %d started successfully in tmux session %s", executionID, sessionName)
+}
+
+func updateTaskExecutionStatus(ctx context.Context, executionID int64, status string) {
+	_, err := queries.UpdateTaskExecutionStatus(ctx, db.UpdateTaskExecutionStatusParams{
+		ID:     executionID,
+		Status: status,
+	})
+	if err != nil {
+		log.Printf("Failed to update task execution status: %v", err)
 	}
 }
 

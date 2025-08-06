@@ -40,5 +40,9 @@ SET
 WHERE id = ?
 RETURNING *;
 
+-- name: ListTaskExecutions :many
+SELECT * FROM task_executions
+ORDER BY created_at DESC;
+
 -- name: DeleteTaskExecution :exec
 DELETE FROM task_executions WHERE id = ?;

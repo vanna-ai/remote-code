@@ -199,6 +199,42 @@ func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) (
 	return items, nil
 }
 
+const listTaskExecutions = `-- name: ListTaskExecutions :many
+SELECT id, task_id, agent_id, worktree_id, status, created_at, updated_at FROM task_executions
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListTaskExecutions(ctx context.Context) ([]TaskExecution, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskExecutions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskExecution
+	for rows.Next() {
+		var i TaskExecution
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.AgentID,
+			&i.WorktreeID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTaskExecutionStatus = `-- name: UpdateTaskExecutionStatus :one
 UPDATE task_executions
 SET 

@@ -19,6 +19,10 @@
 	};
 	let selectedTask = null;
 	let showTaskModal = false;
+	let availableAgents = [];
+	let selectedAgents = [];
+	let executingTask = false;
+	let taskExecutions = new Map(); // Map of taskId to array of executions
 	
 	// Kanban columns
 	const columns = [
@@ -38,6 +42,11 @@
 	
 	onMount(async () => {
 		await loadProject();
+		await loadTaskExecutions();
+		
+		// Refresh task executions every 5 seconds
+		const interval = setInterval(loadTaskExecutions, 5000);
+		return () => clearInterval(interval);
 	});
 	
 	async function loadProject() {
@@ -69,6 +78,25 @@
 	function getTasksByStatus(status) {
 		if (!project || !project.tasks) return [];
 		return project.tasks.filter(task => task.status === status);
+	}
+	
+	async function loadTaskExecutions() {
+		if (!project || !project.tasks) return;
+		
+		try {
+			// Load executions for all tasks in this project
+			for (const task of project.tasks) {
+				const response = await fetch(`/api/task-executions?task_id=${task.id}`);
+				if (response.ok) {
+					const executions = await response.json();
+					taskExecutions.set(task.id, executions);
+				}
+			}
+			// Trigger reactivity
+			taskExecutions = new Map(taskExecutions);
+		} catch (error) {
+			console.error('Failed to load task executions:', error);
+		}
 	}
 	
 	async function createTask() {
@@ -181,14 +209,81 @@
 		}
 	}
 	
-	function selectTask(task) {
+	async function selectTask(task) {
 		selectedTask = task;
+		selectedAgents = [];
 		showTaskModal = true;
+		
+		// Load available agents when task is selected
+		await loadAvailableAgents();
 	}
 	
 	function closeTaskModal() {
 		selectedTask = null;
 		showTaskModal = false;
+		selectedAgents = [];
+		availableAgents = [];
+	}
+	
+	async function loadAvailableAgents() {
+		try {
+			const response = await fetch('/api/agents');
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			availableAgents = await response.json();
+		} catch (error) {
+			console.error('Failed to load agents:', error);
+			availableAgents = [];
+		}
+	}
+	
+	function toggleAgentSelection(agent) {
+		const isSelected = selectedAgents.some(a => a.id === agent.id);
+		if (isSelected) {
+			selectedAgents = selectedAgents.filter(a => a.id !== agent.id);
+		} else {
+			selectedAgents = [...selectedAgents, agent];
+		}
+	}
+	
+	async function startTaskExecution() {
+		if (selectedAgents.length === 0) {
+			alert('Please select at least one agent to execute the task.');
+			return;
+		}
+		
+		executingTask = true;
+		
+		try {
+			for (const agent of selectedAgents) {
+				const response = await fetch('/api/task-executions', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({
+						task_id: selectedTask.id,
+						agent_id: agent.id
+					})
+				});
+				
+				if (!response.ok) {
+					throw new Error(`Failed to start execution with ${agent.name}: ${response.status}`);
+				}
+			}
+			
+			alert(`Task execution started with ${selectedAgents.length} agent(s)!`);
+			// Refresh project data and task executions
+			await loadProject();
+			await loadTaskExecutions();
+			closeTaskModal();
+		} catch (error) {
+			console.error('Failed to start task execution:', error);
+			alert('Failed to start task execution. Please try again.');
+		} finally {
+			executingTask = false;
+		}
 	}
 </script>
 
@@ -551,6 +646,23 @@
 										{#if task.description}
 											<p class="text-sm text-gray-300 mb-2">{task.description}</p>
 										{/if}
+										
+										<!-- Task Executions -->
+										{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
+											<div class="mb-2">
+												<div class="flex flex-wrap gap-1">
+													{#each taskExecutions.get(task.id) as execution}
+														<span class="inline-flex items-center gap-1 bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+															</svg>
+															Agent {execution.agent_id}
+														</span>
+													{/each}
+												</div>
+											</div>
+										{/if}
+										
 										<div class="text-xs text-gray-400 mt-2">
 											📁 {task.baseDirectory.path}
 										</div>
@@ -599,6 +711,23 @@
 											{#if task.description}
 												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
 											{/if}
+											
+											<!-- Task Executions -->
+											{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
+												<div class="mb-2">
+													<div class="flex flex-wrap gap-1">
+														{#each taskExecutions.get(task.id) as execution}
+															<span class="inline-flex items-center gap-1 bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
+																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+																</svg>
+																Agent {execution.agent_id}
+															</span>
+														{/each}
+													</div>
+												</div>
+											{/if}
+											
 											<div class="text-xs text-gray-400 mt-1">
 												📁 {task.baseDirectory.path}
 											</div>
@@ -691,17 +820,100 @@
 					</div>
 				</div>
 				
+				<!-- Active Executions -->
+				{#if taskExecutions.has(selectedTask.id) && taskExecutions.get(selectedTask.id).length > 0}
+					<div>
+						<h4 class="text-sm font-medium text-gray-300 mb-3">Active Executions</h4>
+						<div class="space-y-2">
+							{#each taskExecutions.get(selectedTask.id) as execution}
+								<div class="bg-gray-700 rounded-lg p-3 border border-yellow-600">
+									<div class="flex items-center justify-between">
+										<div class="flex items-center gap-2">
+											<svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+											</svg>
+											<span class="text-white font-medium">Agent {execution.agent_id}</span>
+											<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-600 text-yellow-100">
+												{execution.status}
+											</span>
+										</div>
+										<a 
+											href="/terminal/task_{execution.task_id}_agent_{execution.agent_id}"
+											class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors"
+											target="_blank"
+										>
+											View Terminal
+										</a>
+									</div>
+									<div class="text-xs text-gray-400 mt-2">
+										Started: {new Date(execution.created_at.Time).toLocaleString()}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				
 				<div class="pt-4 border-t border-gray-700">
 					<h4 class="text-sm font-medium text-gray-300 mb-3">Execute Task</h4>
-					<div class="bg-gray-700 rounded-lg p-4 text-center">
-						<p class="text-gray-400 mb-3">Select agents to execute this task</p>
-						<button 
-							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-							disabled
-						>
-							Start Execution (Coming Soon)
-						</button>
-					</div>
+					
+					{#if availableAgents.length > 0}
+						<div class="bg-gray-700 rounded-lg p-4">
+							<p class="text-gray-400 mb-3">Select agents to execute this task:</p>
+							
+							<div class="space-y-2 mb-4 max-h-40 overflow-y-auto">
+								{#each availableAgents as agent}
+									<label class="flex items-center gap-3 p-2 rounded hover:bg-gray-600 cursor-pointer">
+										<input 
+											type="checkbox"
+											checked={selectedAgents.some(a => a.id === agent.id)}
+											on:change={() => toggleAgentSelection(agent)}
+											class="w-4 h-4 text-blue-500 bg-gray-600 border-gray-500 rounded focus:ring-blue-400 focus:ring-2"
+										/>
+										<div class="flex-1">
+											<div class="font-medium text-white">{agent.name}</div>
+											<div class="text-sm text-gray-400 font-mono">{agent.command} {agent.params}</div>
+										</div>
+									</label>
+								{/each}
+							</div>
+							
+							{#if selectedAgents.length > 0}
+								<div class="text-sm text-gray-400 mb-3">
+									Selected: {selectedAgents.map(a => a.name).join(', ')}
+								</div>
+							{/if}
+							
+							<button 
+								on:click={startTaskExecution}
+								disabled={selectedAgents.length === 0 || executingTask}
+								class="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+							>
+								{#if executingTask}
+									<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+									Starting Execution...
+								{:else}
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h1m4 0h1m-2-4h.01M12 16h.01M12 8h.01M12 12h.01"/>
+									</svg>
+									Start Execution ({selectedAgents.length})
+								{/if}
+							</button>
+						</div>
+					{:else}
+						<div class="bg-gray-700 rounded-lg p-4 text-center">
+							<p class="text-gray-400 mb-3">No agents configured</p>
+							<a 
+								href="/agents"
+								class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
+							>
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+								</svg>
+								Configure Agents
+							</a>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
