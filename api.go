@@ -341,7 +341,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 
 func handleAgentDetection(w http.ResponseWriter, r *http.Request, ctx context.Context) {
 	// Define the agents to detect
-	agentsToDetect := []string{"claude", "amp", "codex", "gemini", "codabuff", "aider", "opencode", "friday", "grok"}
+	agentsToDetect := []string{"claude", "amp", "codex", "gemini", "codebuff", "aider", "opencode", "friday", "grok"}
 	
 	var availableAgents []map[string]interface{}
 	
