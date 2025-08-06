@@ -418,6 +418,63 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 		}
 		json.NewEncoder(w).Encode(result)
 
+	case "DELETE":
+		if len(pathParts) == 0 {
+			http.Error(w, "Project ID required", http.StatusBadRequest)
+			return
+		}
+		
+		projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid project ID", http.StatusBadRequest)
+			return
+		}
+		
+		// Delete all tasks in this project first (which will also clean up task executions)
+		tasks, err := queries.GetTasksByProjectID(ctx, projectID)
+		if err == nil {
+			for _, task := range tasks {
+				// Check if there are any active task executions for this task
+				executions, err := queries.GetTaskExecutionsByTaskID(ctx, task.ID)
+				if err == nil && len(executions) > 0 {
+					// Delete all task executions first
+					for _, execution := range executions {
+						err := deleteTaskExecutionWithCleanup(ctx, execution.ID)
+						if err != nil {
+							log.Printf("Warning: failed to cleanup task execution %d: %v", execution.ID, err)
+						}
+					}
+				}
+				
+				// Delete the task
+				err = queries.DeleteTask(ctx, task.ID)
+				if err != nil {
+					log.Printf("Warning: failed to delete task %d: %v", task.ID, err)
+				}
+			}
+		}
+		
+		// Delete all base directories for this project
+		baseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+		if err == nil {
+			for _, baseDir := range baseDirs {
+				err = queries.DeleteBaseDirectory(ctx, baseDir.ID)
+				if err != nil {
+					log.Printf("Warning: failed to delete base directory %d: %v", baseDir.ID, err)
+				}
+			}
+		}
+		
+		// Finally delete the project
+		err = queries.DeleteProject(ctx, projectID)
+		if err != nil {
+			log.Printf("Failed to delete project: %v", err)
+			http.Error(w, "Failed to delete project", http.StatusInternalServerError)
+			return
+		}
+		
+		w.WriteHeader(http.StatusNoContent)
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -1272,7 +1329,102 @@ func stopDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) e
 }
 
 func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	json.NewEncoder(w).Encode(map[string]string{"message": "Tasks API not implemented yet"})
+	switch r.Method {
+	case "GET":
+		if len(pathParts) > 0 {
+			// Get specific task
+			taskID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid task ID", http.StatusBadRequest)
+				return
+			}
+			
+			task, err := queries.GetTask(ctx, taskID)
+			if err != nil {
+				http.Error(w, "Task not found", http.StatusNotFound)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(task)
+		} else {
+			// List all tasks - for now return empty array as we primarily use project tasks
+			json.NewEncoder(w).Encode([]db.Task{})
+		}
+		
+	case "PUT":
+		if len(pathParts) == 0 {
+			http.Error(w, "Task ID required", http.StatusBadRequest)
+			return
+		}
+		
+		taskID, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid task ID", http.StatusBadRequest)
+			return
+		}
+		
+		var updateReq struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Status      string `json:"status"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		updatedTask, err := queries.UpdateTask(ctx, db.UpdateTaskParams{
+			ID:          taskID,
+			Title:       updateReq.Title,
+			Description: updateReq.Description,
+			Status:      updateReq.Status,
+		})
+		if err != nil {
+			log.Printf("Failed to update task: %v", err)
+			http.Error(w, "Failed to update task", http.StatusInternalServerError)
+			return
+		}
+		
+		json.NewEncoder(w).Encode(updatedTask)
+		
+	case "DELETE":
+		if len(pathParts) == 0 {
+			http.Error(w, "Task ID required", http.StatusBadRequest)
+			return
+		}
+		
+		taskID, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid task ID", http.StatusBadRequest)
+			return
+		}
+		
+		// Check if there are any active task executions for this task
+		executions, err := queries.GetTaskExecutionsByTaskID(ctx, taskID)
+		if err == nil && len(executions) > 0 {
+			// Delete all task executions first
+			for _, execution := range executions {
+				err := deleteTaskExecutionWithCleanup(ctx, execution.ID)
+				if err != nil {
+					log.Printf("Warning: failed to cleanup task execution %d: %v", execution.ID, err)
+				}
+			}
+		}
+		
+		// Delete the task
+		err = queries.DeleteTask(ctx, taskID)
+		if err != nil {
+			log.Printf("Failed to delete task: %v", err)
+			http.Error(w, "Failed to delete task", http.StatusInternalServerError)
+			return
+		}
+		
+		w.WriteHeader(http.StatusNoContent)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

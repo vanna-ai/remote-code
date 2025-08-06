@@ -30,6 +30,10 @@
 	let selectedAgents = [];
 	let executingTask = false;
 	let taskExecutions = new Map(); // Map of taskId to array of executions
+	let deletingTasks = new Set();
+	let updatingTasks = new Set();
+	let deletingProject = false;
+	let refreshing = false;
 	
 	// Kanban columns
 	const columns = [
@@ -47,6 +51,26 @@
 	
 	$: projectId = $page.params.id;
 	
+	// Reactive statements for debugging
+	$: if (project && project.tasks) {
+		console.log('=== PROJECT TASKS DEBUG ===');
+		console.log('Total tasks:', project.tasks.length);
+		console.log('Task statuses:', project.tasks.map(t => ({ id: t.id, title: t.title, status: t.status })));
+		console.log('Unique statuses in tasks:', [...new Set(project.tasks.map(t => t.status))]);
+	}
+	
+	$: todoTasks = (project && !loading) ? getTasksByStatus('todo') : [];
+	$: inProgressTasks = (project && !loading) ? getTasksByStatus('in_progress') : [];  
+	$: doneTasks = (project && !loading) ? getTasksByStatus('done') : [];
+	
+	$: {
+		console.log('=== KANBAN FILTER DEBUG ===');
+		console.log('Todo tasks:', todoTasks.length, todoTasks);
+		console.log('In Progress tasks:', inProgressTasks.length, inProgressTasks);
+		console.log('Done tasks:', doneTasks.length, doneTasks);
+		console.log('Columns config:', columns);
+	}
+	
 	onMount(async () => {
 		await loadProject();
 		await loadTaskExecutions();
@@ -58,13 +82,23 @@
 	
 	async function loadProject() {
 		try {
-			loading = true;
+			// Only show loading spinner on initial load, not on refreshes
+			if (!project) {
+				loading = true;
+			} else {
+				refreshing = true;
+			}
 			error = null;
+			
 			const response = await fetch(`/api/projects/${projectId}`);
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 			project = await response.json();
+			
+			console.log('=== RAW PROJECT DATA ===');
+			console.log('Raw project from API:', project);
+			console.log('Raw tasks:', project.tasks);
 			
 			// Ensure tasks have a status field for Kanban
 			if (project.tasks) {
@@ -72,19 +106,44 @@
 					...task,
 					status: task.status || 'todo'
 				}));
+				
+				console.log('=== PROCESSED TASKS ===');
+				console.log('Tasks after processing:', project.tasks);
 			}
 			
+			// Trigger reactivity
+			project = { ...project };
+			
 			loading = false;
+			refreshing = false;
 		} catch (err) {
 			console.error('Failed to load project:', err);
 			error = err.message;
 			loading = false;
+			refreshing = false;
 		}
 	}
 	
 	function getTasksByStatus(status) {
-		if (!project || !project.tasks) return [];
-		return project.tasks.filter(task => task.status === status);
+		console.log('getTasksByStatus called with status:', status);
+		console.log('Project exists:', !!project);
+		console.log('Project.tasks exists:', !!(project && project.tasks));
+		console.log('Project.tasks length:', project?.tasks?.length || 0);
+		
+		if (!project || !project.tasks) {
+			console.log('Returning empty array - no project or tasks');
+			return [];
+		}
+		
+		console.log('All tasks with statuses:', project.tasks.map(t => ({ id: t.id, title: t.title, status: t.status })));
+		
+		const filteredTasks = project.tasks.filter(task => {
+			console.log(`Task ${task.id} (${task.title}) has status '${task.status}', looking for '${status}', match: ${task.status === status}`);
+			return task.status === status;
+		});
+		
+		console.log(`Found ${filteredTasks.length} tasks with status '${status}':`, filteredTasks.map(t => ({ id: t.id, title: t.title })));
+		return filteredTasks;
 	}
 	
 	async function loadTaskExecutions() {
@@ -127,7 +186,9 @@
 			}
 			
 			const createdTask = await response.json();
-			project.tasks = [...(project.tasks || []), createdTask];
+			
+			// Reload the entire project to ensure consistency
+			await loadProject();
 			
 			// Reset form with default base directory if only one exists
 			const defaultBaseDir = project.baseDirectories && project.baseDirectories.length === 1 
@@ -173,7 +234,9 @@
 			const createdDirectory = await response.json();
 			console.log('Created directory:', createdDirectory);
 			
-			project.baseDirectories = [...(project.baseDirectories || []), createdDirectory];
+			// Reload the entire project to ensure consistency
+			await loadProject();
+			
 			newDirectory = { 
 				path: '', 
 				gitInitialized: false,
@@ -207,8 +270,8 @@
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 			
-			// Remove the directory from the local state
-			project.baseDirectories = project.baseDirectories.filter(dir => dir.base_directory_id !== directoryId);
+			// Reload the entire project to ensure consistency
+			await loadProject();
 			console.log('Directory deleted successfully');
 		} catch (error) {
 			console.error('Failed to delete directory:', error);
@@ -292,6 +355,116 @@
 			executingTask = false;
 		}
 	}
+
+	async function deleteTask(task) {
+		if (deletingTasks.has(task.id)) return;
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to delete "${task.title}"? This will:\n\n• Delete all task executions\n• Clean up all associated resources\n• Remove the task permanently\n\nThis action cannot be undone.`);
+		
+		if (!confirmed) return;
+		
+		try {
+			// Add to deleting set to show loading state
+			deletingTasks = new Set([...deletingTasks, task.id]);
+			
+			const response = await fetch(`/api/tasks/${task.id}`, {
+				method: 'DELETE'
+			});
+			
+			if (response.ok) {
+				// Reload the entire project to ensure consistency
+				await loadProject();
+				// Reload task executions
+				await loadTaskExecutions();
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to delete task: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to delete task:', err);
+			alert('Failed to delete task');
+		} finally {
+			// Remove from deleting set
+			deletingTasks = new Set([...deletingTasks].filter(id => id !== task.id));
+		}
+	}
+
+	async function updateTaskStatus(task, newStatus) {
+		if (updatingTasks.has(task.id)) return;
+		
+		try {
+			// Add to updating set to show loading state
+			updatingTasks = new Set([...updatingTasks, task.id]);
+			
+			const response = await fetch(`/api/tasks/${task.id}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					title: task.title,
+					description: task.description,
+					status: newStatus
+				})
+			});
+			
+			if (response.ok) {
+				const updatedTask = await response.json();
+				console.log('Task status updated:', updatedTask);
+				
+				// Immediately update the task in local state for instant UI feedback
+				const taskIndex = project.tasks.findIndex(t => t.id === task.id);
+				if (taskIndex >= 0) {
+					project.tasks[taskIndex] = { ...project.tasks[taskIndex], status: updatedTask.status };
+					// Force Svelte reactivity by reassigning the array and project
+					project = { 
+						...project, 
+						tasks: [...project.tasks]
+					};
+				}
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to update task status: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to update task status:', err);
+			alert('Failed to update task status');
+		} finally {
+			// Remove from updating set
+			updatingTasks = new Set([...updatingTasks].filter(id => id !== task.id));
+		}
+	}
+
+	async function deleteProject() {
+		if (deletingProject) return;
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to delete the "${project.name}" project? This will:\n\n• Delete all tasks and their executions\n• Clean up all associated resources\n• Remove all base directories\n• Delete the project permanently\n\nThis action cannot be undone.`);
+		
+		if (!confirmed) return;
+		
+		try {
+			deletingProject = true;
+			
+			const response = await fetch(`/api/projects/${projectId}`, {
+				method: 'DELETE'
+			});
+			
+			if (response.ok) {
+				// Navigate back to projects list
+				window.location.href = '/';
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to delete project: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to delete project:', err);
+			alert('Failed to delete project');
+		} finally {
+			deletingProject = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -324,7 +497,12 @@
 							</svg>
 						</div>
 						<div>
-							<h1 class="text-3xl font-bold text-blue-400 mb-1">{project.name}</h1>
+							<div class="flex items-center gap-2 mb-1">
+								<h1 class="text-3xl font-bold text-blue-400">{project.name}</h1>
+								{#if refreshing}
+									<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+								{/if}
+							</div>
 							<p class="text-gray-300">{(project.tasks || []).length} tasks • {(project.baseDirectories || []).length} directories</p>
 						</div>
 					</div>
@@ -367,6 +545,22 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 							</svg>
 							New Task
+						</button>
+						
+						<!-- Delete Project Button -->
+						<button 
+							on:click={deleteProject}
+							disabled={deletingProject}
+							class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+						>
+							{#if deletingProject}
+								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
+							{:else}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+								</svg>
+							{/if}
+							{deletingProject ? 'Deleting...' : 'Delete Project'}
 						</button>
 					</div>
 				</div>
@@ -635,19 +829,59 @@
 							<div class="flex items-center gap-2 mb-4">
 								<div class="w-3 h-3 rounded-full {column.color}"></div>
 								<h3 class="font-semibold text-white">{column.title}</h3>
-								<span class="text-sm text-gray-400">({getTasksByStatus(column.id).length})</span>
+								<span class="text-sm text-gray-400">({column.id === 'todo' ? todoTasks.length : column.id === 'in_progress' ? inProgressTasks.length : doneTasks.length})</span>
 							</div>
 							
 							<div class="space-y-3">
-								{#each getTasksByStatus(column.id) as task}
+								{#each column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks as task}
 									<div 
-										class="bg-gray-700 rounded-lg p-3 border border-gray-600 hover:border-gray-500 hover:bg-gray-650 cursor-pointer transition-colors"
-										on:click={() => selectTask(task)}
+										class="bg-gray-700 rounded-lg p-3 border border-gray-600 hover:border-gray-500 hover:bg-gray-650 transition-colors group"
 									>
-										<h4 class="font-medium text-white mb-1">{task.title}</h4>
-										{#if task.description}
-											<p class="text-sm text-gray-300 mb-2">{task.description}</p>
-										{/if}
+										<div class="flex items-start justify-between mb-1">
+											<h4 
+												class="font-medium text-white flex-1 cursor-pointer hover:text-blue-300 transition-colors" 
+												on:click={() => selectTask(task)}
+											>
+												{task.title}
+											</h4>
+											<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+												<!-- Status Change Dropdown -->
+												<div class="relative">
+													<select 
+														value={task.status}
+														on:change={(e) => updateTaskStatus(task, e.target.value)}
+														disabled={updatingTasks.has(task.id)}
+														class="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-xs text-white hover:bg-gray-500 transition-colors disabled:opacity-50"
+														on:click|stopPropagation
+													>
+														{#each columns as col}
+															<option value={col.id}>{col.title}</option>
+														{/each}
+													</select>
+												</div>
+												
+												<!-- Delete Button -->
+												<button 
+													on:click|stopPropagation={() => deleteTask(task)}
+													disabled={deletingTasks.has(task.id)}
+													class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													title="Delete task"
+												>
+													{#if deletingTasks.has(task.id)}
+														<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+													{:else}
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+														</svg>
+													{/if}
+												</button>
+											</div>
+										</div>
+										
+										<div class="cursor-pointer" on:click={() => selectTask(task)}>
+											{#if task.description}
+												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
+											{/if}
 										
 										<!-- Task Executions -->
 										{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
@@ -669,13 +903,14 @@
 											</div>
 										{/if}
 										
-										<div class="text-xs text-gray-400 mt-2">
-											📁 {task.baseDirectory.path}
+											<div class="text-xs text-gray-400 mt-2">
+												📁 {task.baseDirectory?.path || 'No base directory'}
+											</div>
 										</div>
 									</div>
 								{/each}
 								
-								{#if getTasksByStatus(column.id).length === 0}
+								{#if (column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks).length === 0}
 									<div class="text-center py-6 text-gray-500">
 										<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
@@ -708,11 +943,10 @@
 						<div class="divide-y divide-gray-700">
 							{#each project.tasks || [] as task}
 								<div 
-									class="p-4 hover:bg-gray-750 cursor-pointer transition-colors"
-									on:click={() => selectTask(task)}
+									class="p-4 hover:bg-gray-750 transition-colors group"
 								>
 									<div class="flex items-start justify-between">
-										<div class="flex-1">
+										<div class="flex-1 cursor-pointer" on:click={() => selectTask(task)}>
 											<h4 class="font-medium text-white mb-1">{task.title}</h4>
 											{#if task.description}
 												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
@@ -739,10 +973,12 @@
 											{/if}
 											
 											<div class="text-xs text-gray-400 mt-1">
-												📁 {task.baseDirectory.path}
+												📁 {task.baseDirectory?.path || 'No base directory'}
 											</div>
 										</div>
-										<div class="flex items-center gap-2 ml-4">
+										
+										<div class="flex items-center gap-3 ml-4">
+											<!-- Status Badge -->
 											{#each columns as column}
 												{#if column.id === task.status}
 													<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
@@ -751,6 +987,38 @@
 													</span>
 												{/if}
 											{/each}
+											
+											<!-- Task Management Buttons (hidden by default, shown on hover) -->
+											<div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+												<!-- Status Change Dropdown -->
+												<select 
+													value={task.status}
+													on:change={(e) => updateTaskStatus(task, e.target.value)}
+													disabled={updatingTasks.has(task.id)}
+													class="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-xs text-white hover:bg-gray-500 transition-colors disabled:opacity-50"
+													on:click|stopPropagation
+												>
+													{#each columns as col}
+														<option value={col.id}>{col.title}</option>
+													{/each}
+												</select>
+												
+												<!-- Delete Button -->
+												<button 
+													on:click|stopPropagation={() => deleteTask(task)}
+													disabled={deletingTasks.has(task.id)}
+													class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+													title="Delete task"
+												>
+													{#if deletingTasks.has(task.id)}
+														<div class="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
+													{:else}
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+														</svg>
+													{/if}
+												</button>
+											</div>
 										</div>
 									</div>
 								</div>
@@ -809,20 +1077,20 @@
 							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 							</svg>
-							<span class="font-mono text-sm text-green-300">{selectedTask.baseDirectory.path}</span>
-							{#if selectedTask.baseDirectory.git_initialized}
+							<span class="font-mono text-sm text-green-300">{selectedTask.baseDirectory?.path || 'No path'}</span>
+							{#if selectedTask.baseDirectory?.git_initialized}
 								<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
 									Git
 								</span>
 							{/if}
 						</div>
 						
-						{#if selectedTask.baseDirectory.worktree_setup_commands || selectedTask.baseDirectory.dev_server_setup_commands}
+						{#if selectedTask.baseDirectory?.worktree_setup_commands || selectedTask.baseDirectory?.dev_server_setup_commands}
 							<div class="text-xs text-gray-400 space-y-1">
-								{#if selectedTask.baseDirectory.worktree_setup_commands}
+								{#if selectedTask.baseDirectory?.worktree_setup_commands}
 									<div><strong>Setup:</strong> {selectedTask.baseDirectory.worktree_setup_commands}</div>
 								{/if}
-								{#if selectedTask.baseDirectory.dev_server_setup_commands}
+								{#if selectedTask.baseDirectory?.dev_server_setup_commands}
 									<div><strong>Dev Server:</strong> {selectedTask.baseDirectory.dev_server_setup_commands}</div>
 								{/if}
 							</div>
