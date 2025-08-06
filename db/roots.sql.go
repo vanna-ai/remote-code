@@ -85,6 +85,40 @@ func (q *Queries) GetRootWithAgentsAndProjects(ctx context.Context, id int64) (R
 	return i, err
 }
 
+const listRoots = `-- name: ListRoots :many
+SELECT id, local_port, external_url, created_at, updated_at FROM roots
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListRoots(ctx context.Context) ([]Root, error) {
+	rows, err := q.db.QueryContext(ctx, listRoots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Root
+	for rows.Next() {
+		var i Root
+		if err := rows.Scan(
+			&i.ID,
+			&i.LocalPort,
+			&i.ExternalUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRoot = `-- name: UpdateRoot :one
 UPDATE roots
 SET local_port = ?, external_url = ?, updated_at = CURRENT_TIMESTAMP

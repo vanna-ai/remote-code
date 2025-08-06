@@ -1,10 +1,36 @@
 <script>
+	import { onMount } from 'svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	// Home page with card-based navigation
 	const breadcrumbSegments = [
 		{ label: "Dashboard", href: "/" }
 	];
+	
+	let stats = {
+		active_sessions: 0,
+		projects: 0,
+		task_executions: 0,
+		agents: 0
+	};
+	let loading = true;
+	
+	onMount(async () => {
+		await loadDashboardStats();
+	});
+	
+	async function loadDashboardStats() {
+		try {
+			const response = await fetch('/api/dashboard/stats');
+			if (response.ok) {
+				stats = await response.json();
+			}
+		} catch (error) {
+			console.error('Failed to load dashboard stats:', error);
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -44,7 +70,14 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
 						</svg>
 					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-green-400 transition-colors">Terminal</h3>
+					<div class="flex-1">
+						<div class="flex items-center gap-3">
+							<h3 class="text-xl font-semibold text-white group-hover:text-green-400 transition-colors">Terminal</h3>
+							<span class="px-2 py-1 bg-green-500/20 text-green-400 text-sm font-medium rounded-full border border-green-500/30">
+								{loading ? '...' : stats.active_sessions}
+							</span>
+						</div>
+					</div>
 				</div>
 				<p class="text-gray-400 mb-4">Interactive terminal with tmux session management</p>
 				<div class="flex items-center text-green-400 text-sm font-medium">
@@ -66,7 +99,14 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
 						</svg>
 					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-blue-400 transition-colors">Projects</h3>
+					<div class="flex-1">
+						<div class="flex items-center gap-3">
+							<h3 class="text-xl font-semibold text-white group-hover:text-blue-400 transition-colors">Projects</h3>
+							<span class="px-2 py-1 bg-blue-500/20 text-blue-400 text-sm font-medium rounded-full border border-blue-500/30">
+								{loading ? '...' : stats.projects}
+							</span>
+						</div>
+					</div>
 				</div>
 				<p class="text-gray-400 mb-4">Manage your development projects and repositories</p>
 				<div class="flex items-center text-blue-400 text-sm font-medium">
@@ -88,7 +128,14 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
 						</svg>
 					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-purple-400 transition-colors">Task Executions</h3>
+					<div class="flex-1">
+						<div class="flex items-center gap-3">
+							<h3 class="text-xl font-semibold text-white group-hover:text-purple-400 transition-colors">Task Executions</h3>
+							<span class="px-2 py-1 bg-purple-500/20 text-purple-400 text-sm font-medium rounded-full border border-purple-500/30">
+								{loading ? '...' : stats.task_executions}
+							</span>
+						</div>
+					</div>
 				</div>
 				<p class="text-gray-400 mb-4">Track and manage task executions and workflows</p>
 				<div class="flex items-center text-purple-400 text-sm font-medium">
@@ -110,7 +157,14 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
 						</svg>
 					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-orange-400 transition-colors">Agents</h3>
+					<div class="flex-1">
+						<div class="flex items-center gap-3">
+							<h3 class="text-xl font-semibold text-white group-hover:text-orange-400 transition-colors">Agents</h3>
+							<span class="px-2 py-1 bg-orange-500/20 text-orange-400 text-sm font-medium rounded-full border border-orange-500/30">
+								{loading ? '...' : stats.agents}
+							</span>
+						</div>
+					</div>
 				</div>
 				<p class="text-gray-400 mb-4">Configure and manage AI development agents</p>
 				<div class="flex items-center text-orange-400 text-sm font-medium">
@@ -144,26 +198,6 @@
 					</svg>
 				</div>
 			</a>
-		</div>
-
-		<!-- Quick Stats -->
-		<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-				<div class="text-2xl font-bold text-green-400">0</div>
-				<div class="text-sm text-gray-400">Active Sessions</div>
-			</div>
-			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-				<div class="text-2xl font-bold text-blue-400">0</div>
-				<div class="text-sm text-gray-400">Projects</div>
-			</div>
-			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-				<div class="text-2xl font-bold text-purple-400">0</div>
-				<div class="text-sm text-gray-400">Task Executions</div>
-			</div>
-			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
-				<div class="text-2xl font-bold text-orange-400">0</div>
-				<div class="text-sm text-gray-400">Agents</div>
-			</div>
 		</div>
 	</div>
 </div>

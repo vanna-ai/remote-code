@@ -20,3 +20,7 @@ RETURNING *;
 
 -- name: DeleteProject :exec
 DELETE FROM projects WHERE id = ?;
+
+-- name: ListProjects :many
+SELECT * FROM projects
+ORDER BY name;

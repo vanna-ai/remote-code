@@ -20,3 +20,7 @@ RETURNING *;
 
 -- name: DeleteAgent :exec
 DELETE FROM agents WHERE id = ?;
+
+-- name: ListAgents :many
+SELECT * FROM agents
+ORDER BY name;

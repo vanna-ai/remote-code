@@ -40,6 +40,8 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	switch pathParts[0] {
+	case "dashboard":
+		handleDashboardAPI(w, r, ctx, pathParts[1:])
 	case "roots":
 		handleRootsAPI(w, r, ctx, pathParts[1:])
 	case "projects":
@@ -58,6 +60,57 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
+	}
+}
+
+type DashboardStats struct {
+	ActiveSessions   int `json:"active_sessions"`
+	Projects         int `json:"projects"`
+	TaskExecutions   int `json:"task_executions"`
+	Agents          int `json:"agents"`
+}
+
+func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	switch r.Method {
+	case "GET":
+		if len(pathParts) > 0 && pathParts[0] == "stats" {
+			// Get dashboard statistics
+			stats := DashboardStats{}
+			
+			// Count active tmux sessions
+			cmd := exec.Command("tmux", "list-sessions")
+			output, err := cmd.Output()
+			if err == nil {
+				sessions := strings.Split(strings.TrimSpace(string(output)), "\n")
+				if len(sessions) > 0 && sessions[0] != "" {
+					stats.ActiveSessions = len(sessions)
+				}
+			}
+			
+			// Count projects
+			projects, err := queries.ListProjects(ctx)
+			if err == nil {
+				stats.Projects = len(projects)
+			}
+			
+			// Count task executions
+			executions, err := queries.ListTaskExecutions(ctx)
+			if err == nil {
+				stats.TaskExecutions = len(executions)
+			}
+			
+			// Count agents
+			agents, err := queries.ListAgents(ctx)
+			if err == nil {
+				stats.Agents = len(agents)
+			}
+			
+			json.NewEncoder(w).Encode(stats)
+		} else {
+			http.Error(w, "Unknown dashboard endpoint", http.StatusNotFound)
+		}
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

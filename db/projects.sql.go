@@ -95,6 +95,40 @@ func (q *Queries) GetProjectsByRootID(ctx context.Context, rootID int64) ([]Proj
 	return items, nil
 }
 
+const listProjects = `-- name: ListProjects :many
+SELECT id, root_id, name, created_at, updated_at FROM projects
+ORDER BY name
+`
+
+func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.RootID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
 SET name = ?, updated_at = CURRENT_TIMESTAMP

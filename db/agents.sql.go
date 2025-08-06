@@ -108,6 +108,42 @@ func (q *Queries) GetAgentsByRootID(ctx context.Context, rootID int64) ([]Agent,
 	return items, nil
 }
 
+const listAgents = `-- name: ListAgents :many
+SELECT id, root_id, name, command, params, created_at, updated_at FROM agents
+ORDER BY name
+`
+
+func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
+	rows, err := q.db.QueryContext(ctx, listAgents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.RootID,
+			&i.Name,
+			&i.Command,
+			&i.Params,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAgent = `-- name: UpdateAgent :one
 UPDATE agents
 SET name = ?, command = ?, params = ?, updated_at = CURRENT_TIMESTAMP

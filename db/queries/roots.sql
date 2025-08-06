@@ -25,3 +25,7 @@ RETURNING *;
 
 -- name: DeleteRoot :exec
 DELETE FROM roots WHERE id = ?;
+
+-- name: ListRoots :many
+SELECT * FROM roots
+ORDER BY created_at DESC;
