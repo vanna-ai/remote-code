@@ -1,6 +1,13 @@
 <script>
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	
+	$: breadcrumbSegments = [
+		{ label: "Dashboard", href: "/" },
+		{ label: "Projects", href: "/projects" },
+		{ label: project?.name || "Loading...", href: `/projects/${$page.params.id}` }
+	];
 	
 	let project = null;
 	let loading = true;
@@ -293,16 +300,11 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
 		<!-- Header -->
 		<div class="mb-6">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/projects" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-					</svg>
-					<span>Back to Projects</span>
-				</a>
-			</div>
 			
 			{#if loading}
 				<div class="flex items-center gap-4">
@@ -652,12 +654,16 @@
 											<div class="mb-2">
 												<div class="flex flex-wrap gap-1">
 													{#each taskExecutions.get(task.id) as execution}
-														<span class="inline-flex items-center gap-1 bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
+														<a 
+															href="/tasks/{execution.id}"
+															class="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-purple-100 px-2 py-1 rounded text-xs transition-colors"
+															on:click|stopPropagation
+														>
 															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 															</svg>
 															Agent {execution.agent_id}
-														</span>
+														</a>
 													{/each}
 												</div>
 											</div>
@@ -717,12 +723,16 @@
 												<div class="mb-2">
 													<div class="flex flex-wrap gap-1">
 														{#each taskExecutions.get(task.id) as execution}
-															<span class="inline-flex items-center gap-1 bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
+															<a 
+																href="/tasks/{execution.id}"
+																class="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-purple-100 px-2 py-1 rounded text-xs transition-colors"
+																on:click|stopPropagation
+															>
 																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 																</svg>
 																Agent {execution.agent_id}
-															</span>
+															</a>
 														{/each}
 													</div>
 												</div>
@@ -838,11 +848,10 @@
 											</span>
 										</div>
 										<a 
-											href="/terminal/task_{execution.task_id}_agent_{execution.agent_id}"
-											class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors"
-											target="_blank"
+											href="/tasks/{execution.id}"
+											class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-xs transition-colors"
 										>
-											View Terminal
+											View Execution
 										</a>
 									</div>
 									<div class="text-xs text-gray-400 mt-2">

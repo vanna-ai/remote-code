@@ -861,14 +861,64 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 		return err
 	}
 	
+	// We need to get the task to find dev server setup commands
+	// First, let's get the task execution to find the task_id
+	executions, err := queries.ListTaskExecutions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list task executions: %v", err)
+	}
+	
+	var taskID int64
+	for _, exec := range executions {
+		if exec.WorktreeID == worktreeID {
+			taskID = exec.TaskID
+			break
+		}
+	}
+	
+	if taskID == 0 {
+		return fmt.Errorf("no task found for worktree %d", worktreeID)
+	}
+	
+	// Get task with base directory info to access dev server setup commands
+	taskWithBaseDir, err := queries.GetTaskWithBaseDirectory(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to get task with base directory: %v", err)
+	}
+	
 	// Create dev server session name
 	devSessionName := fmt.Sprintf("dev_%d", worktreeID)
 	
-	// Start tmux session for dev server
+	// Start tmux session for dev server in the worktree directory
 	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", devSessionName, "-c", worktree.Path)
 	err = tmuxCmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to create dev server tmux session: %v", err)
+	}
+	
+	// If there are dev server setup commands, execute them in the session
+	if taskWithBaseDir.DevServerSetupCommands != "" {
+		// Execute the dev server setup commands
+		setupCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, taskWithBaseDir.DevServerSetupCommands, "Enter")
+		err = setupCmd.Run()
+		if err != nil {
+			log.Printf("Failed to send dev server setup commands: %v", err)
+			// Don't return error here, session is still created
+		}
+		
+		// Add a separator and info message
+		infoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "", "Enter")
+		infoCmd.Run()
+		
+		echoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "echo 'Dev server started. Session: "+devSessionName+"'", "Enter")
+		echoCmd.Run()
+	} else {
+		// No setup commands, just show info
+		echoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "echo 'Dev server session created. No setup commands configured.'", "Enter")
+		echoCmd.Run()
+		
+		bashCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "bash", "Enter")
+		bashCmd.Run()
 	}
 	
 	// Update worktree with dev server session info

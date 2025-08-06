@@ -1,5 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	
+	const breadcrumbSegments = [
+		{ label: "Dashboard", href: "/" },
+		{ label: "Task Executions", href: "/tasks" }
+	];
 	
 	let taskExecutions = [];
 	let loading = true;
@@ -137,16 +143,11 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
 		<!-- Header -->
 		<div class="mb-6">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-					</svg>
-					<span>Back to Dashboard</span>
-				</a>
-			</div>
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-4">
 					<div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
@@ -159,89 +160,9 @@
 						<p class="text-gray-300">Track and manage task executions and workflows</p>
 					</div>
 				</div>
-				<button 
-					on:click={() => showExecuteForm = true}
-					class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-				>
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-					</svg>
-					Execute Task
-				</button>
 			</div>
 		</div>
 
-		<!-- Execute Task Form -->
-		{#if showExecuteForm}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Execute Task</h3>
-				<form on:submit|preventDefault={executeTask} class="space-y-4">
-					<div>
-						<label for="task-select" class="block text-sm font-medium text-gray-300 mb-2">
-							Task
-						</label>
-						<select 
-							id="task-select"
-							bind:value={newExecution.taskId}
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
-							required
-						>
-							<option value="">Select a task</option>
-							{#each tasks as task}
-								<option value={task.id}>{task.title}</option>
-							{/each}
-						</select>
-					</div>
-					<div>
-						<label for="agent-select" class="block text-sm font-medium text-gray-300 mb-2">
-							Agent
-						</label>
-						<select 
-							id="agent-select"
-							bind:value={newExecution.agentId}
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
-							required
-						>
-							<option value="">Select an agent</option>
-							{#each agents as agent}
-								<option value={agent.id}>{agent.name}</option>
-							{/each}
-						</select>
-					</div>
-					<div>
-						<label for="worktree-select" class="block text-sm font-medium text-gray-300 mb-2">
-							Worktree
-						</label>
-						<select 
-							id="worktree-select"
-							bind:value={newExecution.worktreeId}
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
-							required
-						>
-							<option value="">Select a worktree</option>
-							{#each worktrees as worktree}
-								<option value={worktree.id}>{worktree.path}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Execute Task
-						</button>
-						<button 
-							type="button"
-							on:click={() => showExecuteForm = false}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		{/if}
 
 		<!-- Task Executions List -->
 		{#if loading}
@@ -256,13 +177,13 @@
 					</svg>
 				</div>
 				<h3 class="text-xl font-semibold text-gray-300 mb-2">No Task Executions Yet</h3>
-				<p class="text-gray-400 mb-4">Execute your first task to get started</p>
-				<button 
-					on:click={() => showExecuteForm = true}
-					class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors"
+				<p class="text-gray-400 mb-4">Execute tasks from the Projects page to see executions here</p>
+				<a 
+					href="/projects"
+					class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors inline-block"
 				>
-					Execute Task
-				</button>
+					Go to Projects
+				</a>
 			</div>
 		{:else}
 			<div class="space-y-4">

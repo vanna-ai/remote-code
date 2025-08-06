@@ -1,5 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	
+	const breadcrumbSegments = [
+		{ label: "Dashboard", href: "/" },
+		{ label: "Agents", href: "/agents" }
+	];
 	
 	let agents = [];
 	let availableAgents = [];
@@ -162,16 +168,11 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
 		<!-- Header -->
 		<div class="mb-6">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-					</svg>
-					<span>Back to Dashboard</span>
-				</a>
-			</div>
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-4">
 					<div class="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">

@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 
 	let terminalElement;
 	let ws;
@@ -12,6 +13,11 @@
 	let error = null;
 
 	$: sessionId = $page.params.session;
+	$: breadcrumbSegments = [
+		{ label: "Dashboard", href: "/" },
+		{ label: "Terminal", href: "/terminal" },
+		{ label: sessionId || "Session", href: `/terminal/${sessionId}` }
+	];
 
 	onMount(() => {
 		loadSessionInfo();
@@ -161,16 +167,11 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
 		<!-- Header -->
 		<div class="mb-6">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/terminal" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-					</svg>
-					<span>Back to Terminal Sessions</span>
-				</a>
-			</div>
 			
 			{#if loading}
 				<div class="flex items-center gap-4">

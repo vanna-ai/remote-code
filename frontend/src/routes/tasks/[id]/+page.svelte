@@ -2,15 +2,26 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	
+	$: breadcrumbSegments = [
+		{ label: "Dashboard", href: "/" },
+		{ label: "Task Executions", href: "/tasks" },
+		{ label: execution?.task_title || `Execution ${$page.params.id}`, href: `/tasks/${$page.params.id}` }
+	];
 
 	let terminalElement;
+	let devTerminalElement;
 	let ws;
+	let devWs;
 	let term;
+	let devTerm;
 	let execution = null;
 	let gitStatus = null;
 	let loading = true;
 	let error = null;
 	let devServerRunning = false;
+	let showDevTerminal = false;
 
 	$: executionId = $page.params.id;
 
@@ -21,8 +32,14 @@
 			if (ws) {
 				ws.close();
 			}
+			if (devWs) {
+				devWs.close();
+			}
 			if (term) {
 				term.dispose();
+			}
+			if (devTerm) {
+				devTerm.dispose();
 			}
 		};
 	});
@@ -37,11 +54,26 @@
 			if (response.ok) {
 				execution = await response.json();
 				
+				// Check if dev server is running
+				if (execution.worktree_id) {
+					const worktreeResponse = await fetch(`/api/worktrees/${execution.worktree_id}`);
+					if (worktreeResponse.ok) {
+						const worktree = await worktreeResponse.json();
+						devServerRunning = worktree.dev_server_tmux_id && worktree.dev_server_tmux_id.Valid;
+						showDevTerminal = devServerRunning;
+					}
+				}
+				
 				// Load git status for the worktree
 				await loadGitStatus();
 				
 				// Initialize terminal once we have execution info
 				initializeTerminal();
+				
+				// Initialize dev terminal if dev server is running
+				if (showDevTerminal) {
+					initializeDevTerminal();
+				}
 			} else {
 				error = `Task execution ${executionId} not found`;
 			}
@@ -144,6 +176,77 @@
 		window.addEventListener('resize', handleResize);
 	}
 
+	function initializeDevTerminal() {
+		// Load xterm if not already loaded
+		if (!window.Terminal) {
+			const script1 = document.createElement('script');
+			script1.src = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js';
+			document.head.appendChild(script1);
+
+			const script2 = document.createElement('script');
+			script2.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js';
+			document.head.appendChild(script2);
+
+			script2.onload = () => createDevTerminal();
+		} else {
+			createDevTerminal();
+		}
+	}
+
+	function createDevTerminal() {
+		// Wait for the dev terminal element to be available
+		if (!devTerminalElement) {
+			console.error('Dev terminal element not available yet');
+			setTimeout(createDevTerminal, 100);
+			return;
+		}
+
+		devTerm = new window.Terminal({
+			cursorBlink: true,
+			fontSize: 14,
+			fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+		});
+
+		const fitAddon = new window.FitAddon.FitAddon();
+		devTerm.loadAddon(fitAddon);
+
+		devTerm.open(devTerminalElement);
+		fitAddon.fit();
+
+		// Create WebSocket connection for the dev server session
+		const devSessionName = `dev_${execution.worktree_id}`;
+		const wsUrl = `ws://localhost:8080/ws?session=${devSessionName}`;
+		devWs = new WebSocket(wsUrl);
+
+		devWs.onopen = function() {
+			console.log('WebSocket connected to dev server session:', devSessionName);
+		};
+
+		devWs.onmessage = function(event) {
+			devTerm.write(event.data);
+		};
+
+		devWs.onerror = function(error) {
+			console.error('Dev WebSocket error:', error);
+		};
+
+		devWs.onclose = function() {
+			console.log('Dev WebSocket disconnected');
+		};
+
+		devTerm.onData(function(data) {
+			if (devWs && devWs.readyState === WebSocket.OPEN) {
+				devWs.send(data);
+			}
+		});
+
+		const handleResize = () => {
+			fitAddon.fit();
+		};
+
+		window.addEventListener('resize', handleResize);
+	}
+
 	async function runDevServer() {
 		if (!execution?.worktree_id) return;
 		
@@ -154,8 +257,12 @@
 			
 			if (response.ok) {
 				devServerRunning = true;
-				// Optionally reload execution details to get updated info
-				await loadTaskExecutionDetails();
+				showDevTerminal = true;
+				
+				// Initialize dev terminal after a short delay to ensure the session is created
+				setTimeout(() => {
+					initializeDevTerminal();
+				}, 1000);
 			}
 		} catch (err) {
 			console.error('Failed to start dev server:', err);
@@ -173,7 +280,16 @@
 			
 			if (response.ok) {
 				devServerRunning = false;
-				await loadTaskExecutionDetails();
+				showDevTerminal = false;
+				
+				// Close dev terminal connections
+				if (devWs) {
+					devWs.close();
+				}
+				if (devTerm) {
+					devTerm.dispose();
+					devTerm = null;
+				}
 			}
 		} catch (err) {
 			console.error('Failed to stop dev server:', err);
@@ -203,16 +319,11 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
 		<!-- Header -->
 		<div class="mb-6">
-			<div class="flex items-center gap-4 mb-4">
-				<a href="/tasks" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-					</svg>
-					<span>Back to Task Executions</span>
-				</a>
-			</div>
 			
 			{#if loading}
 				<div class="flex items-center gap-4">
@@ -425,6 +536,38 @@
 			<div class="mt-4 text-sm text-gray-400 text-center">
 				<p>Terminal connected to task execution session</p>
 			</div>
+
+			<!-- Dev Server Terminal -->
+			{#if showDevTerminal}
+				<div class="mt-6 bg-black rounded-lg border border-green-700 shadow-xl">
+					<div class="flex items-center justify-between p-4 border-b border-green-700">
+						<div class="flex items-center gap-3">
+							<div class="flex gap-1">
+								<div class="w-3 h-3 rounded-full bg-red-500"></div>
+								<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+								<div class="w-3 h-3 rounded-full bg-green-500"></div>
+							</div>
+							<span class="text-green-400 text-sm font-mono">dev_{execution.worktree_id}</span>
+							<span class="px-2 py-1 rounded text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500">DEV SERVER</span>
+						</div>
+						<div class="flex items-center gap-2 text-xs text-green-500">
+							<div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+							<span>Running</span>
+						</div>
+					</div>
+					<div class="p-4">
+						<div 
+							id="dev-terminal" 
+							bind:this={devTerminalElement}
+							class="w-full h-[50vh] focus:outline-none"
+						></div>
+					</div>
+				</div>
+				
+				<div class="mt-4 text-sm text-green-400 text-center">
+					<p>Dev server terminal - showing startup logs and output</p>
+				</div>
+			{/if}
 		{:else if error}
 			<div class="bg-gray-800 rounded-lg border border-red-600 p-8 text-center">
 				<svg class="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
