@@ -34,7 +34,7 @@
 </script>
 
 <svelte:head>
-	<title>Remote-Code Dashboard</title>
+	<title>Dashboard</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-900 text-white">
@@ -51,7 +51,6 @@
 					class="h-16 w-auto"
 				/>
 				<div>
-					<h1 class="text-4xl font-bold text-green-400 mb-2">Remote-Code</h1>
 					<p class="text-gray-300 text-lg">Development environment management platform</p>
 				</div>
 			</div>

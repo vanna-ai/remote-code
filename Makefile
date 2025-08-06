@@ -3,7 +3,7 @@
 build: frontend backend
 
 frontend:
-	cd frontend && npm run build
+	cd frontend && bash -c 'export PATH="$$HOME/.nvm/versions/node/v24.5.0/bin:$$PATH" && npm run build'
 
 backend:
 	go build -o remote-code .
@@ -12,7 +12,7 @@ dev:
 	go run .
 
 install:
-	cd frontend && npm install
+	cd frontend && bash -c 'export PATH="$$HOME/.nvm/versions/node/v24.5.0/bin:$$PATH" && npm install'
 
 sqlc-generate:
 	~/go/bin/sqlc generate
