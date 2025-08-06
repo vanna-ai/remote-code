@@ -125,7 +125,8 @@
 		fitAddon.fit();
 
 		// Create WebSocket connection for specific session
-		const wsUrl = `ws://localhost:8080/ws?session=${sessionId}`;
+		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
+		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${sessionId}`;
 		ws = new WebSocket(wsUrl);
 
 		ws.onopen = function() {
