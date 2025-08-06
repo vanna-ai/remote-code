@@ -73,6 +73,14 @@
 	}
 
 	function createTerminal() {
+		// Wait for the terminal element to be available
+		if (!terminalElement) {
+			console.error('Terminal element not available yet');
+			// Try again after a short delay
+			setTimeout(createTerminal, 100);
+			return;
+		}
+
 		term = new window.Terminal({
 			cursorBlink: true,
 			fontSize: 14,

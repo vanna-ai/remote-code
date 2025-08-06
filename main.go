@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unicode/utf8"
 
 	"remote-code/db"
 
@@ -111,7 +112,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				}
 				break
 			}
-			if err := conn.WriteMessage(websocket.TextMessage, buf[:n]); err != nil {
+			
+			// Ensure the data is valid UTF-8 before sending
+			data := buf[:n]
+			if !utf8.Valid(data) {
+				// Convert invalid UTF-8 to valid UTF-8 by replacing invalid bytes
+				data = []byte(strings.ToValidUTF8(string(data), "�"))
+			}
+			
+			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 				log.Printf("WebSocket write error: %v", err)
 				break
 			}

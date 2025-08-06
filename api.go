@@ -548,12 +548,17 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			queries := db.New(database)
 			executions, err := queries.GetTaskExecutionsByTaskID(ctx, taskID)
 			if err != nil {
-				log.Printf("Failed to get task executions: %v", err)
-				http.Error(w, "Failed to get task executions", http.StatusInternalServerError)
-				return
+			log.Printf("Failed to get task executions: %v", err)
+			http.Error(w, "Failed to get task executions", http.StatusInternalServerError)
+			return
 			}
 			
-			json.NewEncoder(w).Encode(executions)
+			// Ensure we return empty array instead of null
+		if executions == nil {
+			executions = []db.TaskExecution{}
+		}
+		
+		json.NewEncoder(w).Encode(executions)
 			return
 		}
 		
@@ -564,6 +569,11 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			log.Printf("Failed to list task executions: %v", err)
 			http.Error(w, "Failed to list task executions", http.StatusInternalServerError)
 			return
+		}
+		
+		// Ensure we return empty array instead of null
+		if executions == nil {
+			executions = []db.TaskExecution{}
 		}
 		
 		json.NewEncoder(w).Encode(executions)
