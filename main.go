@@ -35,8 +35,13 @@ func main() {
 	http.HandleFunc("/ws", handleWebSocket)
 	http.HandleFunc("/api/", handleAPI)
 
-	log.Println("Server starting on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	
+	log.Printf("Server starting on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"remote-code/db"
+	
+	"github.com/robert-nix/ansihtml"
 )
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {
@@ -228,16 +230,13 @@ func getTmuxSessions() ([]TmuxSession, error) {
 		sessionName := parts[0]
 		created := parts[1]
 		
-		// Get preview of the session
+		// Get preview of the session with colors - capture more lines for scrollable view
 		preview := ""
-		previewCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-p")
+		previewCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-e", "-p", "-S", "-20")
 		if previewOutput, err := previewCmd.Output(); err == nil {
-			// Get last few lines
-			previewLines := strings.Split(strings.TrimSpace(string(previewOutput)), "\n")
-			if len(previewLines) > 10 {
-				previewLines = previewLines[len(previewLines)-10:]
-			}
-			preview = strings.Join(previewLines, "\n")
+			rawPreview := strings.TrimSpace(string(previewOutput))
+			// Convert ANSI to HTML
+			preview = string(ansihtml.ConvertToHTML([]byte(rawPreview)))
 		}
 		
 		session := TmuxSession{
@@ -1777,3 +1776,4 @@ func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) er
 	
 	return nil
 }
+

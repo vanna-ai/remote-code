@@ -193,12 +193,37 @@
 
 	$: taskSessions = sessions.filter(s => s.is_task);
 	$: regularSessions = sessions.filter(s => !s.is_task);
+
+	// Auto-scroll preview containers to bottom when sessions update
+	$: if (sessions.length > 0) {
+		// Use a small timeout to ensure DOM is updated
+		setTimeout(() => {
+			const previewContainers = document.querySelectorAll('.terminal-preview');
+			previewContainers.forEach(container => {
+				container.scrollTop = container.scrollHeight;
+			});
+		}, 10);
+	}
+
 </script>
 
 <svelte:head>
 	<title>Remote-Code Terminal</title>
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </svelte:head>
+
+<style>
+	/* Hide scrollbars while keeping scroll functionality */
+	.scrollbar-hide {
+		/* Firefox */
+		scrollbar-width: none;
+	}
+	
+	.scrollbar-hide::-webkit-scrollbar {
+		/* Webkit browsers (Chrome, Safari, Edge) */
+		display: none;
+	}
+</style>
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
@@ -302,8 +327,8 @@
 										<div>Task: <span class="text-white font-mono">{session.task_name || `ID: ${session.task_id}`}</span></div>
 										<div>Agent: <span class="text-white font-mono">{session.agent_name || `ID: ${session.agent_id}`}</span></div>
 									</div>
-									<div class="bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-hidden">
-										<pre class="whitespace-pre-wrap break-words">{session.preview}</pre>
+									<div class="terminal-preview bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
+										<pre class="whitespace-pre font-mono" style="margin: 0;">{@html session.preview}</pre>
 									</div>
 									<div class="mt-3 flex justify-end">
 										<span class="bg-yellow-500 text-black px-2 py-1 rounded text-xs font-semibold">
@@ -340,8 +365,8 @@
 										</div>
 										<span class="text-xs text-gray-400">{formatTime(session.created)}</span>
 									</div>
-									<div class="bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-hidden">
-										<pre class="whitespace-pre-wrap break-words">{session.preview}</pre>
+									<div class="terminal-preview bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
+										<pre class="whitespace-pre font-mono" style="margin: 0;">{@html session.preview}</pre>
 									</div>
 									<div class="mt-3 flex justify-end">
 										<span class="bg-green-500 text-black px-2 py-1 rounded text-xs font-semibold">
