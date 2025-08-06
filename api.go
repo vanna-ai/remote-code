@@ -195,12 +195,13 @@ func handleTmuxSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 }
 
 type TmuxSession struct {
-	Name     string `json:"name"`
-	Created  string `json:"created"`
-	Preview  string `json:"preview"`
-	TaskID   *int64 `json:"task_id,omitempty"`
-	AgentID  *int64 `json:"agent_id,omitempty"`
-	IsTask   bool   `json:"is_task"`
+	Name      string `json:"name"`
+	Created   string `json:"created"`
+	Preview   string `json:"preview"`
+	TaskID    *int64 `json:"task_id,omitempty"`
+	AgentID   *int64 `json:"agent_id,omitempty"`
+	AgentName *string `json:"agent_name,omitempty"`
+	IsTask    bool   `json:"is_task"`
 }
 
 func getTmuxSessions() ([]TmuxSession, error) {
@@ -256,6 +257,10 @@ func getTmuxSessions() ([]TmuxSession, error) {
 				}
 				if agentID, err := strconv.ParseInt(parts[3], 10, 64); err == nil {
 					session.AgentID = &agentID
+					// Look up agent name
+					if agent, err := queries.GetAgent(context.Background(), agentID); err == nil {
+						session.AgentName = &agent.Name
+					}
 				}
 			}
 		}
@@ -628,7 +633,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			
 			// Ensure we return empty array instead of null
 		if executions == nil {
-			executions = []db.TaskExecution{}
+			executions = []db.GetTaskExecutionsByTaskIDRow{}
 		}
 		
 		json.NewEncoder(w).Encode(executions)
@@ -791,7 +796,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 	// Function to send command and wait
 	sendCommandAndWait := func(command string, description string) error {
 		log.Printf("Executing %s: %s", description, command)
-		cmd := exec.Command("tmux", "send-keys", "-t", sessionName, command, "Enter")
+		cmd := exec.Command("tmux", "send-keys", "-l", "-t", sessionName, command+"\r")
 		err := cmd.Run()
 		if err != nil {
 			return fmt.Errorf("failed to send %s command: %v", description, err)

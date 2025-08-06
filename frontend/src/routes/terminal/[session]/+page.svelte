@@ -238,7 +238,7 @@
 								<span>Created: {formatTime(sessionInfo.created)}</span>
 								{#if sessionInfo.is_task}
 									<span>Task ID: <span class="text-yellow-400 font-mono">{sessionInfo.task_id}</span></span>
-									<span>Agent ID: <span class="text-yellow-400 font-mono">{sessionInfo.agent_id}</span></span>
+									<span>Agent: <span class="text-yellow-400 font-mono">{sessionInfo.agent_name || `ID: ${sessionInfo.agent_id}`}</span></span>
 								{/if}
 							</div>
 						</div>

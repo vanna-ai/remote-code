@@ -242,7 +242,7 @@
 								<span class="font-mono">{selectedSession.name}</span>
 								{#if selectedSession.is_task}
 									<span class="text-sm text-gray-400">
-										(Task {selectedSession.task_id} • Agent {selectedSession.agent_id})
+										(Task {selectedSession.task_id} • {selectedSession.agent_name || `Agent ${selectedSession.agent_id}`})
 									</span>
 								{/if}
 							</div>
@@ -300,7 +300,7 @@
 									</div>
 									<div class="text-sm text-gray-300 mb-3">
 										<div>Task ID: <span class="text-white font-mono">{session.task_id}</span></div>
-										<div>Agent ID: <span class="text-white font-mono">{session.agent_id}</span></div>
+										<div>Agent: <span class="text-white font-mono">{session.agent_name || `ID: ${session.agent_id}`}</span></div>
 									</div>
 									<div class="bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-hidden">
 										<pre class="whitespace-pre-wrap break-words">{session.preview}</pre>

@@ -163,20 +163,35 @@ func (q *Queries) GetTaskExecutionsByAgentID(ctx context.Context, agentID int64)
 }
 
 const getTaskExecutionsByTaskID = `-- name: GetTaskExecutionsByTaskID :many
-SELECT id, task_id, agent_id, worktree_id, status, created_at, updated_at FROM task_executions
-WHERE task_id = ?
-ORDER BY created_at
+SELECT 
+    te.id, te.task_id, te.agent_id, te.worktree_id, te.status, te.created_at, te.updated_at,
+    a.name as agent_name
+FROM task_executions te
+JOIN agents a ON te.agent_id = a.id
+WHERE te.task_id = ?
+ORDER BY te.created_at
 `
 
-func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) ([]TaskExecution, error) {
+type GetTaskExecutionsByTaskIDRow struct {
+	ID         int64        `db:"id" json:"id"`
+	TaskID     int64        `db:"task_id" json:"task_id"`
+	AgentID    int64        `db:"agent_id" json:"agent_id"`
+	WorktreeID int64        `db:"worktree_id" json:"worktree_id"`
+	Status     string       `db:"status" json:"status"`
+	CreatedAt  sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt  sql.NullTime `db:"updated_at" json:"updated_at"`
+	AgentName  string       `db:"agent_name" json:"agent_name"`
+}
+
+func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) ([]GetTaskExecutionsByTaskIDRow, error) {
 	rows, err := q.db.QueryContext(ctx, getTaskExecutionsByTaskID, taskID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TaskExecution
+	var items []GetTaskExecutionsByTaskIDRow
 	for rows.Next() {
-		var i TaskExecution
+		var i GetTaskExecutionsByTaskIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TaskID,
@@ -185,6 +200,7 @@ func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) (
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AgentName,
 		); err != nil {
 			return nil, err
 		}

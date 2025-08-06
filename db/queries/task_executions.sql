@@ -8,9 +8,13 @@ SELECT * FROM task_executions
 WHERE id = ?;
 
 -- name: GetTaskExecutionsByTaskID :many
-SELECT * FROM task_executions
-WHERE task_id = ?
-ORDER BY created_at;
+SELECT 
+    te.*,
+    a.name as agent_name
+FROM task_executions te
+JOIN agents a ON te.agent_id = a.id
+WHERE te.task_id = ?
+ORDER BY te.created_at;
 
 -- name: GetTaskExecutionsByAgentID :many
 SELECT * FROM task_executions
