@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -265,7 +266,104 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 
 // Placeholder handlers for other endpoints
 func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	json.NewEncoder(w).Encode(map[string]string{"message": "Agents API not implemented yet"})
+	switch r.Method {
+	case "GET":
+		if len(pathParts) > 0 && pathParts[0] == "detect" {
+			// Detect available agents on the system
+			handleAgentDetection(w, r, ctx)
+			return
+		}
+		
+		// List all agents for default root (assuming root_id = 1 for now)
+		dbAgents, err := queries.GetAgentsByRootID(ctx, 1)
+		if err != nil {
+			log.Printf("Failed to get agents: %v", err)
+			json.NewEncoder(w).Encode([]Agent{})
+			return
+		}
+		
+		var agents []Agent
+		for _, dbAgent := range dbAgents {
+			agents = append(agents, Agent{
+				Name:    dbAgent.Name,
+				Command: dbAgent.Command,
+				Params:  dbAgent.Params,
+			})
+		}
+		
+		json.NewEncoder(w).Encode(agents)
+		
+	case "POST":
+		// Create a new agent
+		var createReq struct {
+			RootId  int64  `json:"root_id"`
+			Name    string `json:"name"`
+			Command string `json:"command"`
+			Params  string `json:"params"`
+		}
+		
+		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		
+		agent, err := queries.CreateAgent(ctx, db.CreateAgentParams{
+			RootID:  createReq.RootId,
+			Name:    createReq.Name,
+			Command: createReq.Command,
+			Params:  createReq.Params,
+		})
+		if err != nil {
+			log.Printf("Failed to create agent: %v", err)
+			http.Error(w, "Failed to create agent", http.StatusInternalServerError)
+			return
+		}
+		
+		result := Agent{
+			Name:    agent.Name,
+			Command: agent.Command,
+			Params:  agent.Params,
+		}
+		json.NewEncoder(w).Encode(result)
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleAgentDetection(w http.ResponseWriter, r *http.Request, ctx context.Context) {
+	// Define the agents to detect
+	agentsToDetect := []string{"claude", "amp", "codex", "gemini", "codabuff", "aider", "opencode", "friday", "grok"}
+	
+	var availableAgents []map[string]interface{}
+	
+	for _, agentName := range agentsToDetect {
+		cmd := exec.Command("which", agentName)
+		output, err := cmd.Output()
+		
+		if err == nil && len(output) > 0 {
+			// Agent is available
+			path := strings.TrimSpace(string(output))
+			availableAgents = append(availableAgents, map[string]interface{}{
+				"name":      agentName,
+				"command":   agentName,
+				"path":      path,
+				"available": true,
+			})
+		} else {
+			// Agent not found
+			availableAgents = append(availableAgents, map[string]interface{}{
+				"name":      agentName,
+				"command":   agentName,
+				"path":      "",
+				"available": false,
+			})
+		}
+	}
+	
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"agents": availableAgents,
+	})
 }
 
 func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

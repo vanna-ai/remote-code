@@ -2,7 +2,11 @@
 	import { onMount } from 'svelte';
 	
 	let agents = [];
+	let availableAgents = [];
 	let loading = true;
+	let detecting = false;
+	let showAddAgentForm = false;
+	let newAgent = { name: '', command: '', params: '' };
 
 	onMount(async () => {
 		await loadAgents();
@@ -10,28 +14,77 @@
 
 	async function loadAgents() {
 		try {
-			// Mock data for now
-			agents = [
-				{
-					id: 1,
-					name: "Claude Code Assistant",
-					command: "claude-code",
-					params: "--model claude-3-sonnet",
-					status: "active"
-				},
-				{
-					id: 2,
-					name: "GitHub Copilot",
-					command: "copilot",
-					params: "",
-					status: "inactive"
-				}
-			];
+			loading = true;
+			const response = await fetch('/api/agents');
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			agents = await response.json();
 			loading = false;
+			
+			// Always detect available agents when page loads
+			await detectAgents();
+			
 		} catch (error) {
 			console.error('Failed to load agents:', error);
 			loading = false;
 		}
+	}
+	
+	async function detectAgents() {
+		try {
+			detecting = true;
+			const response = await fetch('/api/agents/detect');
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			const data = await response.json();
+			availableAgents = data.agents;
+			detecting = false;
+		} catch (error) {
+			console.error('Failed to detect agents:', error);
+			detecting = false;
+		}
+	}
+	
+	async function addAgent(agentData) {
+		try {
+			const response = await fetch('/api/agents', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					root_id: 1, // Default root for now
+					name: agentData.name,
+					command: agentData.command,
+					params: agentData.params || ''
+				})
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			
+			const createdAgent = await response.json();
+			agents = [...agents, createdAgent];
+			
+			// Reset form
+			newAgent = { name: '', command: '', params: '' };
+			showAddAgentForm = false;
+		} catch (error) {
+			console.error('Failed to add agent:', error);
+			alert('Failed to add agent. Please try again.');
+		}
+	}
+	
+	function addDetectedAgent(detectedAgent) {
+		const agentName = detectedAgent.name.charAt(0).toUpperCase() + detectedAgent.name.slice(1);
+		addAgent({
+			name: `${agentName} Assistant`,
+			command: detectedAgent.command,
+			params: ''
+		});
 	}
 </script>
 
@@ -63,7 +116,10 @@
 						<p class="text-gray-300">Configure and manage AI development agents</p>
 					</div>
 				</div>
-				<button class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+				<button 
+					on:click={() => showAddAgentForm = true}
+					class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+				>
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 					</svg>
@@ -72,53 +128,200 @@
 			</div>
 		</div>
 
-		<!-- Agents List -->
+		<!-- Add Agent Form -->
+		{#if showAddAgentForm}
+			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+				<h3 class="text-xl font-semibold text-white mb-4">Add New Agent</h3>
+				<form on:submit|preventDefault={() => addAgent(newAgent)} class="space-y-4">
+					<div>
+						<label for="agent-name" class="block text-sm font-medium text-gray-300 mb-2">
+							Agent Name
+						</label>
+						<input 
+							id="agent-name"
+							type="text" 
+							bind:value={newAgent.name}
+							placeholder="e.g., Claude Assistant"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+							required
+						/>
+					</div>
+					<div>
+						<label for="agent-command" class="block text-sm font-medium text-gray-300 mb-2">
+							Command
+						</label>
+						<input 
+							id="agent-command"
+							type="text" 
+							bind:value={newAgent.command}
+							placeholder="e.g., claude"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+							required
+						/>
+					</div>
+					<div>
+						<label for="agent-params" class="block text-sm font-medium text-gray-300 mb-2">
+							Parameters (optional)
+						</label>
+						<input 
+							id="agent-params"
+							type="text" 
+							bind:value={newAgent.params}
+							placeholder="e.g., --model claude-3-sonnet"
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
+						/>
+					</div>
+					<div class="flex gap-3">
+						<button 
+							type="submit"
+							class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Add Agent
+						</button>
+						<button 
+							type="button"
+							on:click={() => showAddAgentForm = false}
+							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
+			</div>
+		{/if}
+
+		<!-- Loading State -->
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
 				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
+				<span class="ml-3 text-gray-300">Loading agents...</span>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				{#each agents as agent}
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-orange-400 transition-colors">
-						<div class="flex items-center justify-between mb-4">
-							<div class="flex items-center gap-3">
-								<div class="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
-									<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-									</svg>
+			<!-- Configured Agents Section -->
+			{#if agents.length > 0}
+				<div class="mb-6">
+					<h3 class="text-lg font-semibold text-white mb-4">Configured Agents</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+						{#each agents as agent}
+							<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-orange-400 transition-colors">
+								<div class="flex items-center justify-between mb-4">
+									<div class="flex items-center gap-3">
+										<div class="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+											<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+											</svg>
+										</div>
+										<h4 class="text-lg font-semibold text-white">{agent.name}</h4>
+									</div>
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white bg-green-500">
+										Configured
+									</span>
 								</div>
-								<h3 class="text-lg font-semibold text-white">{agent.name}</h3>
-							</div>
-							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {agent.status === 'active' ? 'bg-green-500' : 'bg-gray-500'}">
-								{agent.status}
-							</span>
-						</div>
-						
-						<div class="space-y-2 mb-4">
-							<div class="text-sm">
-								<span class="text-gray-400">Command:</span>
-								<span class="text-white font-mono ml-2">{agent.command}</span>
-							</div>
-							{#if agent.params}
-								<div class="text-sm">
-									<span class="text-gray-400">Parameters:</span>
-									<span class="text-white font-mono ml-2">{agent.params}</span>
+								
+								<div class="space-y-2 mb-4">
+									<div class="text-sm">
+										<span class="text-gray-400">Command:</span>
+										<span class="text-white font-mono ml-2">{agent.command}</span>
+									</div>
+									{#if agent.params}
+										<div class="text-sm">
+											<span class="text-gray-400">Parameters:</span>
+											<span class="text-white font-mono ml-2">{agent.params}</span>
+										</div>
+									{/if}
 								</div>
-							{/if}
-						</div>
 
-						<div class="flex gap-2">
-							<button class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm transition-colors">
-								Configure
-							</button>
-							<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors">
-								{agent.status === 'active' ? 'Disable' : 'Enable'}
-							</button>
-						</div>
+								<div class="flex gap-2">
+									<button class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm transition-colors">
+										Configure
+									</button>
+									<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors">
+										Remove
+									</button>
+								</div>
+							</div>
+						{/each}
 					</div>
-				{/each}
+				</div>
+			{/if}
+
+			<!-- Available Agents Section -->
+			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="text-lg font-semibold text-white">Available Agents</h3>
+					{#if detecting}
+						<div class="flex items-center gap-2">
+							<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-400"></div>
+							<span class="text-sm text-gray-400">Detecting...</span>
+						</div>
+					{:else}
+						<button 
+							on:click={detectAgents}
+							class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm transition-colors"
+						>
+							Refresh Detection
+						</button>
+					{/if}
+				</div>
+				
+				{#if availableAgents.length > 0}
+					<p class="text-gray-400 mb-4">
+						AI development agents found on your system. Click "Add" to configure them.
+					</p>
+					
+					{#if availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)).length > 0}
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							{#each availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)) as agent}
+								<div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+									<div class="flex items-center justify-between">
+										<div>
+											<h4 class="font-medium text-white">{agent.name}</h4>
+											<p class="text-sm text-gray-400 font-mono">{agent.path}</p>
+										</div>
+										<button 
+											on:click={() => addDetectedAgent(agent)}
+											class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm transition-colors"
+										>
+											Add
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="text-gray-500 text-center py-4">
+							All available agents are already configured.
+						</p>
+					{/if}
+				{:else}
+					<p class="text-gray-500 text-center py-4">
+						{#if detecting}
+							Scanning for available agents...
+						{:else}
+							No AI development agents were detected. You can manually add agents using the "Add Agent" button above.
+						{/if}
+					</p>
+				{/if}
 			</div>
+			
+			<!-- Empty State (only when no configured agents AND no detection has run) -->
+			{#if agents.length === 0 && availableAgents.length === 0 && !detecting}
+				<div class="text-center py-12">
+					<div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
+						<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+						</svg>
+					</div>
+					<h3 class="text-xl font-semibold text-gray-300 mb-2">No Agents Configured</h3>
+					<p class="text-gray-400 mb-4">Add AI development agents to execute tasks</p>
+					<button 
+						on:click={detectAgents}
+						class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
+					>
+						Detect Available Agents
+					</button>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>
