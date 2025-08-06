@@ -1,68 +1,105 @@
 <script>
 	import { onMount } from 'svelte';
 	
-	let tasks = [];
+	let taskExecutions = [];
 	let loading = true;
-	let showCreateForm = false;
-	let newTask = { title: '', description: '' };
+	let showExecuteForm = false;
+	let tasks = [];
+	let agents = [];
+	let worktrees = [];
+	let newExecution = { taskId: '', agentId: '', worktreeId: '' };
 
 	onMount(async () => {
+		await loadTaskExecutions();
 		await loadTasks();
+		await loadAgents();
+		await loadWorktrees();
 	});
 
-	async function loadTasks() {
+	async function loadTaskExecutions() {
 		try {
-			// Mock data for now
-			tasks = [
-				{
-					id: 1,
-					title: "Setup development environment",
-					description: "Configure tmux sessions and base directories",
-					status: "in_progress",
-					worktree: {
-						path: "/home/user/projects/web-app",
-						baseDirectoryId: "web-app"
-					}
-				},
-				{
-					id: 2,
-					title: "Implement user authentication",
-					description: "Add login and registration functionality",
-					status: "pending",
-					worktree: null
-				}
-			];
+			const response = await fetch('/api/task-executions');
+			if (!response.ok) {
+				throw new Error('Failed to fetch task executions');
+			}
+			taskExecutions = await response.json();
 			loading = false;
 		} catch (error) {
-			console.error('Failed to load tasks:', error);
+			console.error('Failed to load task executions:', error);
+			// Fallback to empty array
+			taskExecutions = [];
 			loading = false;
 		}
 	}
 
-	async function createTask() {
-		if (!newTask.title.trim()) return;
+	async function loadTasks() {
+		try {
+			const response = await fetch('/api/tasks');
+			if (response.ok) {
+				tasks = await response.json();
+			}
+		} catch (error) {
+			console.error('Failed to load tasks:', error);
+		}
+	}
+
+	async function loadAgents() {
+		try {
+			const response = await fetch('/api/agents');
+			if (response.ok) {
+				agents = await response.json();
+			}
+		} catch (error) {
+			console.error('Failed to load agents:', error);
+		}
+	}
+
+	async function loadWorktrees() {
+		try {
+			const response = await fetch('/api/worktrees');
+			if (response.ok) {
+				worktrees = await response.json();
+			}
+		} catch (error) {
+			console.error('Failed to load worktrees:', error);
+		}
+	}
+
+	async function executeTask() {
+		if (!newExecution.taskId || !newExecution.agentId || !newExecution.worktreeId) return;
 		
 		try {
-			const task = {
-				id: Date.now(),
-				title: newTask.title,
-				description: newTask.description,
-				status: "pending",
-				worktree: null
-			};
+			const response = await fetch('/api/task-executions', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					task_id: parseInt(newExecution.taskId),
+					agent_id: parseInt(newExecution.agentId),
+					worktree_id: parseInt(newExecution.worktreeId),
+					status: 'pending'
+				})
+			});
 			
-			tasks = [...tasks, task];
-			newTask = { title: '', description: '' };
-			showCreateForm = false;
+			if (!response.ok) {
+				throw new Error('Failed to create task execution');
+			}
+			
+			await loadTaskExecutions();
+			newExecution = { taskId: '', agentId: '', worktreeId: '' };
+			showExecuteForm = false;
 		} catch (error) {
-			console.error('Failed to create task:', error);
+			console.error('Failed to execute task:', error);
+			alert('Failed to execute task: ' + error.message);
 		}
 	}
 
 	function getStatusColor(status) {
 		switch (status) {
 			case 'completed': return 'bg-green-500';
-			case 'in_progress': return 'bg-yellow-500';
+			case 'running': return 'bg-blue-500';
+			case 'failed': return 'bg-red-500';
 			case 'pending': return 'bg-gray-500';
 			default: return 'bg-gray-500';
 		}
@@ -71,15 +108,31 @@
 	function getStatusText(status) {
 		switch (status) {
 			case 'completed': return 'Completed';
-			case 'in_progress': return 'In Progress';
+			case 'running': return 'Running';
+			case 'failed': return 'Failed';
 			case 'pending': return 'Pending';
 			default: return 'Unknown';
 		}
 	}
+
+	function getTaskTitle(taskId) {
+		const task = tasks.find(t => t.id === taskId);
+		return task ? task.title : `Task ${taskId}`;
+	}
+
+	function getAgentName(agentId) {
+		const agent = agents.find(a => a.id === agentId);
+		return agent ? agent.name : `Agent ${agentId}`;
+	}
+
+	function getWorktreePath(worktreeId) {
+		const worktree = worktrees.find(w => w.id === worktreeId);
+		return worktree ? worktree.path : `Worktree ${worktreeId}`;
+	}
 </script>
 
 <svelte:head>
-	<title>Tasks - Remote-Code</title>
+	<title>Task Executions - Remote-Code</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-900 text-white">
@@ -98,66 +151,89 @@
 				<div class="flex items-center gap-4">
 					<div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
 						<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 						</svg>
 					</div>
 					<div>
-						<h1 class="text-3xl font-bold text-purple-400 mb-1">Tasks</h1>
-						<p class="text-gray-300">Track and manage development tasks and workflows</p>
+						<h1 class="text-3xl font-bold text-purple-400 mb-1">Task Executions</h1>
+						<p class="text-gray-300">Track and manage task executions and workflows</p>
 					</div>
 				</div>
 				<button 
-					on:click={() => showCreateForm = true}
+					on:click={() => showExecuteForm = true}
 					class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
 				>
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 					</svg>
-					New Task
+					Execute Task
 				</button>
 			</div>
 		</div>
 
-		<!-- Create Task Form -->
-		{#if showCreateForm}
+		<!-- Execute Task Form -->
+		{#if showExecuteForm}
 			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Create New Task</h3>
-				<form on:submit|preventDefault={createTask} class="space-y-4">
+				<h3 class="text-xl font-semibold text-white mb-4">Execute Task</h3>
+				<form on:submit|preventDefault={executeTask} class="space-y-4">
 					<div>
-						<label for="task-title" class="block text-sm font-medium text-gray-300 mb-2">
-							Task Title
+						<label for="task-select" class="block text-sm font-medium text-gray-300 mb-2">
+							Task
 						</label>
-						<input 
-							id="task-title"
-							type="text" 
-							bind:value={newTask.title}
-							placeholder="Enter task title"
+						<select 
+							id="task-select"
+							bind:value={newExecution.taskId}
 							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
 							required
-						/>
+						>
+							<option value="">Select a task</option>
+							{#each tasks as task}
+								<option value={task.id}>{task.title}</option>
+							{/each}
+						</select>
 					</div>
 					<div>
-						<label for="task-description" class="block text-sm font-medium text-gray-300 mb-2">
-							Description
+						<label for="agent-select" class="block text-sm font-medium text-gray-300 mb-2">
+							Agent
 						</label>
-						<textarea 
-							id="task-description"
-							bind:value={newTask.description}
-							placeholder="Enter task description"
-							rows="3"
+						<select 
+							id="agent-select"
+							bind:value={newExecution.agentId}
 							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
-						></textarea>
+							required
+						>
+							<option value="">Select an agent</option>
+							{#each agents as agent}
+								<option value={agent.id}>{agent.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						<label for="worktree-select" class="block text-sm font-medium text-gray-300 mb-2">
+							Worktree
+						</label>
+						<select 
+							id="worktree-select"
+							bind:value={newExecution.worktreeId}
+							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-400"
+							required
+						>
+							<option value="">Select a worktree</option>
+							{#each worktrees as worktree}
+								<option value={worktree.id}>{worktree.path}</option>
+							{/each}
+						</select>
 					</div>
 					<div class="flex gap-3">
 						<button 
 							type="submit"
 							class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors"
 						>
-							Create Task
+							Execute Task
 						</button>
 						<button 
 							type="button"
-							on:click={() => showCreateForm = false}
+							on:click={() => showExecuteForm = false}
 							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
 						>
 							Cancel
@@ -167,58 +243,74 @@
 			</div>
 		{/if}
 
-		<!-- Tasks List -->
+		<!-- Task Executions List -->
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
 				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
 			</div>
-		{:else if tasks.length === 0}
+		{:else if taskExecutions.length === 0}
 			<div class="text-center py-12">
 				<div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
 					<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 					</svg>
 				</div>
-				<h3 class="text-xl font-semibold text-gray-300 mb-2">No Tasks Yet</h3>
-				<p class="text-gray-400 mb-4">Create your first task to get started</p>
+				<h3 class="text-xl font-semibold text-gray-300 mb-2">No Task Executions Yet</h3>
+				<p class="text-gray-400 mb-4">Execute your first task to get started</p>
 				<button 
-					on:click={() => showCreateForm = true}
+					on:click={() => showExecuteForm = true}
 					class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors"
 				>
-					Create Task
+					Execute Task
 				</button>
 			</div>
 		{:else}
 			<div class="space-y-4">
-				{#each tasks as task}
+				{#each taskExecutions as execution}
 					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-purple-400 transition-colors">
 						<div class="flex items-start justify-between mb-4">
 							<div class="flex-1">
 								<div class="flex items-center gap-3 mb-2">
-									<h3 class="text-lg font-semibold text-white">{task.title}</h3>
-									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getStatusColor(task.status)}">
-										{getStatusText(task.status)}
+									<h3 class="text-lg font-semibold text-white">{getTaskTitle(execution.task_id)}</h3>
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getStatusColor(execution.status)}">
+										{getStatusText(execution.status)}
 									</span>
 								</div>
-								{#if task.description}
-									<p class="text-gray-400 mb-3">{task.description}</p>
-								{/if}
-								{#if task.worktree}
-									<div class="flex items-center text-sm text-gray-400">
+								<div class="space-y-2 text-sm text-gray-400">
+									<div class="flex items-center">
+										<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+										</svg>
+										Agent: {getAgentName(execution.agent_id)}
+									</div>
+									<div class="flex items-center">
 										<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 										</svg>
-										{task.worktree.path}
+										Worktree: {getWorktreePath(execution.worktree_id)}
 									</div>
-								{/if}
+									{#if execution.created_at}
+										<div class="flex items-center">
+											<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+											</svg>
+											Created: {new Date(execution.created_at).toLocaleString()}
+										</div>
+									{/if}
+								</div>
 							</div>
 							<div class="flex gap-2 ml-4">
-								<button class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm transition-colors">
-									Edit
-								</button>
-								<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm transition-colors">
-									Delete
-								</button>
+								<a 
+									href="/tasks/{execution.id}"
+									class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors inline-block"
+								>
+									View Details
+								</a>
+								{#if execution.status === 'running'}
+									<button class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors">
+										Stop
+									</button>
+								{/if}
 							</div>
 						</div>
 					</div>

@@ -536,6 +536,26 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	switch r.Method {
 	case "GET":
+		// Handle individual task execution by ID
+		if len(pathParts) > 0 {
+			executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+				return
+			}
+			
+			queries := db.New(database)
+			execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+			if err != nil {
+				log.Printf("Failed to get task execution: %v", err)
+				http.Error(w, "Task execution not found", http.StatusNotFound)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(execution)
+			return
+		}
+		
 		// Get task executions, optionally filtered by task_id
 		taskIDStr := r.URL.Query().Get("task_id")
 		if taskIDStr != "" {
@@ -761,7 +781,130 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 }
 
 func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	json.NewEncoder(w).Encode(map[string]string{"message": "Worktrees API not implemented yet"})
+	queries := db.New(database)
+	
+	switch r.Method {
+	case "GET":
+		if len(pathParts) == 0 {
+			// List all worktrees - for now return empty array since no ListWorktrees method exists
+			json.NewEncoder(w).Encode([]db.Worktree{})
+		} else {
+			// Get specific worktree
+			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
+				return
+			}
+			
+			worktree, err := queries.GetWorktree(ctx, worktreeID)
+			if err != nil {
+				log.Printf("Failed to get worktree: %v", err)
+				http.Error(w, "Worktree not found", http.StatusNotFound)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(worktree)
+		}
+		
+	case "POST":
+		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
+		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
+			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
+				return
+			}
+			
+			// Start dev server for worktree
+			err = startDevServer(ctx, queries, worktreeID)
+			if err != nil {
+				log.Printf("Failed to start dev server: %v", err)
+				http.Error(w, "Failed to start dev server", http.StatusInternalServerError)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(map[string]string{"status": "dev server started"})
+		} else {
+			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
+		}
+		
+	case "DELETE":
+		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
+		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
+			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
+				return
+			}
+			
+			// Stop dev server for worktree
+			err = stopDevServer(ctx, queries, worktreeID)
+			if err != nil {
+				log.Printf("Failed to stop dev server: %v", err)
+				http.Error(w, "Failed to stop dev server", http.StatusInternalServerError)
+				return
+			}
+			
+			json.NewEncoder(w).Encode(map[string]string{"status": "dev server stopped"})
+		} else {
+			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
+		}
+		
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) error {
+	worktree, err := queries.GetWorktree(ctx, worktreeID)
+	if err != nil {
+		return err
+	}
+	
+	// Create dev server session name
+	devSessionName := fmt.Sprintf("dev_%d", worktreeID)
+	
+	// Start tmux session for dev server
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", devSessionName, "-c", worktree.Path)
+	err = tmuxCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to create dev server tmux session: %v", err)
+	}
+	
+	// Update worktree with dev server session info
+	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
+		ID:              worktree.ID,
+		Path:            worktree.Path,
+		AgentTmuxID:     worktree.AgentTmuxID,
+		DevServerTmuxID: sql.NullString{String: devSessionName, Valid: true},
+		ExternalUrl:     worktree.ExternalUrl,
+	})
+	
+	return err
+}
+
+func stopDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) error {
+	worktree, err := queries.GetWorktree(ctx, worktreeID)
+	if err != nil {
+		return err
+	}
+	
+	if worktree.DevServerTmuxID.Valid {
+		// Kill the tmux session
+		tmuxCmd := exec.Command("tmux", "kill-session", "-t", worktree.DevServerTmuxID.String)
+		_ = tmuxCmd.Run() // Ignore error if session doesn't exist
+	}
+	
+	// Update worktree to remove dev server session info
+	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
+		ID:              worktree.ID,
+		Path:            worktree.Path,
+		AgentTmuxID:     worktree.AgentTmuxID,
+		DevServerTmuxID: sql.NullString{Valid: false},
+		ExternalUrl:     worktree.ExternalUrl,
+	})
+	
+	return err
 }
 
 func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

@@ -80,11 +80,11 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
 						</svg>
 					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-purple-400 transition-colors">Tasks</h3>
+					<h3 class="text-xl font-semibold text-white group-hover:text-purple-400 transition-colors">Task Executions</h3>
 				</div>
-				<p class="text-gray-400 mb-4">Track and manage development tasks and workflows</p>
+				<p class="text-gray-400 mb-4">Track and manage task executions and workflows</p>
 				<div class="flex items-center text-purple-400 text-sm font-medium">
-					<span>View Tasks</span>
+					<span>View Task Executions</span>
 					<svg class="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
 					</svg>
@@ -113,27 +113,6 @@
 				</div>
 			</a>
 
-			<!-- Base Directories Card -->
-			<a 
-				href="/directories" 
-				class="group bg-gray-800 rounded-xl border border-gray-700 p-6 hover:border-yellow-400 transition-all duration-300 hover:shadow-xl hover:shadow-yellow-400/20"
-			>
-				<div class="flex items-center gap-4 mb-4">
-					<div class="w-12 h-12 bg-yellow-500 rounded-lg flex items-center justify-center">
-						<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
-						</svg>
-					</div>
-					<h3 class="text-xl font-semibold text-white group-hover:text-yellow-400 transition-colors">Directories</h3>
-				</div>
-				<p class="text-gray-400 mb-4">Manage base directories and worktree configurations</p>
-				<div class="flex items-center text-yellow-400 text-sm font-medium">
-					<span>Configure Directories</span>
-					<svg class="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-					</svg>
-				</div>
-			</a>
 
 			<!-- Settings Card -->
 			<a 
@@ -171,7 +150,7 @@
 			</div>
 			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
 				<div class="text-2xl font-bold text-purple-400">0</div>
-				<div class="text-sm text-gray-400">Tasks</div>
+				<div class="text-sm text-gray-400">Task Executions</div>
 			</div>
 			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
 				<div class="text-2xl font-bold text-orange-400">0</div>

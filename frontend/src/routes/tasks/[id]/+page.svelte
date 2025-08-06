@@ -1,0 +1,452 @@
+<script>
+	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+
+	let terminalElement;
+	let ws;
+	let term;
+	let execution = null;
+	let gitStatus = null;
+	let loading = true;
+	let error = null;
+	let devServerRunning = false;
+
+	$: executionId = $page.params.id;
+
+	onMount(() => {
+		loadTaskExecutionDetails();
+		
+		return () => {
+			if (ws) {
+				ws.close();
+			}
+			if (term) {
+				term.dispose();
+			}
+		};
+	});
+
+	async function loadTaskExecutionDetails() {
+		try {
+			loading = true;
+			error = null;
+			
+			// Get task execution details with all related information
+			const response = await fetch(`/api/task-executions/${executionId}`);
+			if (response.ok) {
+				execution = await response.json();
+				
+				// Load git status for the worktree
+				await loadGitStatus();
+				
+				// Initialize terminal once we have execution info
+				initializeTerminal();
+			} else {
+				error = `Task execution ${executionId} not found`;
+			}
+		} catch (err) {
+			console.error('Failed to load task execution details:', err);
+			error = 'Failed to load task execution details';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function loadGitStatus() {
+		if (!execution?.worktree_path) return;
+		
+		try {
+			// We'll need to create a git status endpoint - for now mock the data
+			gitStatus = {
+				currentBranch: "feature/task-executions",
+				isDirty: true,
+				ahead: 2,
+				behind: 0,
+				staged: 3,
+				unstaged: 1,
+				untracked: 2,
+				mergeConflicts: false
+			};
+		} catch (err) {
+			console.error('Failed to load git status:', err);
+		}
+	}
+
+	function initializeTerminal() {
+		// Load xterm if not already loaded
+		if (!window.Terminal) {
+			const script1 = document.createElement('script');
+			script1.src = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js';
+			document.head.appendChild(script1);
+
+			const script2 = document.createElement('script');
+			script2.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js';
+			document.head.appendChild(script2);
+
+			script2.onload = () => createTerminal();
+		} else {
+			createTerminal();
+		}
+	}
+
+	function createTerminal() {
+		// Wait for the terminal element to be available
+		if (!terminalElement) {
+			console.error('Terminal element not available yet');
+			setTimeout(createTerminal, 100);
+			return;
+		}
+
+		term = new window.Terminal({
+			cursorBlink: true,
+			fontSize: 14,
+			fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+		});
+
+		const fitAddon = new window.FitAddon.FitAddon();
+		term.loadAddon(fitAddon);
+
+		term.open(terminalElement);
+		fitAddon.fit();
+
+		// Create WebSocket connection for the task execution session
+		const sessionName = `task_${execution.task_id}_agent_${execution.agent_id}`;
+		const wsUrl = `ws://localhost:8080/ws?session=${sessionName}`;
+		ws = new WebSocket(wsUrl);
+
+		ws.onopen = function() {
+			console.log('WebSocket connected to task execution session:', sessionName);
+		};
+
+		ws.onmessage = function(event) {
+			term.write(event.data);
+		};
+
+		ws.onerror = function(error) {
+			console.error('WebSocket error:', error);
+		};
+
+		ws.onclose = function() {
+			console.log('WebSocket disconnected');
+		};
+
+		term.onData(function(data) {
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(data);
+			}
+		});
+
+		const handleResize = () => {
+			fitAddon.fit();
+		};
+
+		window.addEventListener('resize', handleResize);
+	}
+
+	async function runDevServer() {
+		if (!execution?.worktree_id) return;
+		
+		try {
+			const response = await fetch(`/api/worktrees/${execution.worktree_id}/dev-server`, {
+				method: 'POST'
+			});
+			
+			if (response.ok) {
+				devServerRunning = true;
+				// Optionally reload execution details to get updated info
+				await loadTaskExecutionDetails();
+			}
+		} catch (err) {
+			console.error('Failed to start dev server:', err);
+			alert('Failed to start dev server');
+		}
+	}
+
+	async function stopDevServer() {
+		if (!execution?.worktree_id) return;
+		
+		try {
+			const response = await fetch(`/api/worktrees/${execution.worktree_id}/dev-server`, {
+				method: 'DELETE'
+			});
+			
+			if (response.ok) {
+				devServerRunning = false;
+				await loadTaskExecutionDetails();
+			}
+		} catch (err) {
+			console.error('Failed to stop dev server:', err);
+			alert('Failed to stop dev server');
+		}
+	}
+
+	function getStatusColor(status) {
+		switch (status) {
+			case 'completed': return 'text-green-400 bg-green-500/20 border-green-500';
+			case 'running': return 'text-blue-400 bg-blue-500/20 border-blue-500';
+			case 'failed': return 'text-red-400 bg-red-500/20 border-red-500';
+			case 'pending': return 'text-gray-400 bg-gray-500/20 border-gray-500';
+			default: return 'text-gray-400 bg-gray-500/20 border-gray-500';
+		}
+	}
+
+	function formatDate(dateString) {
+		return new Date(dateString).toLocaleString();
+	}
+</script>
+
+<svelte:head>
+	<title>Task Execution {executionId} - Remote-Code</title>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+</svelte:head>
+
+<div class="min-h-screen bg-gray-900 text-white">
+	<div class="container mx-auto p-6">
+		<!-- Header -->
+		<div class="mb-6">
+			<div class="flex items-center gap-4 mb-4">
+				<a href="/tasks" class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+					</svg>
+					<span>Back to Task Executions</span>
+				</a>
+			</div>
+			
+			{#if loading}
+				<div class="flex items-center gap-4">
+					<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
+					<div>
+						<h1 class="text-2xl font-bold text-purple-400">Loading Task Execution...</h1>
+						<p class="text-gray-300">Fetching execution details</p>
+					</div>
+				</div>
+			{:else if error}
+				<div class="flex items-center gap-4">
+					<svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+					</svg>
+					<div>
+						<h1 class="text-2xl font-bold text-red-400">Execution Not Found</h1>
+						<p class="text-gray-300">{error}</p>
+					</div>
+				</div>
+			{:else if execution}
+				<div class="flex items-center justify-between mb-6">
+					<div class="flex items-center gap-4">
+						<div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+							</svg>
+						</div>
+						<div>
+							<div class="flex items-center gap-3 mb-1">
+								<h1 class="text-2xl font-bold text-white">{execution.task_title || `Task ${execution.task_id}`}</h1>
+								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getStatusColor(execution.status)}">
+									{execution.status.toUpperCase()}
+								</span>
+							</div>
+							<p class="text-gray-300">Task Execution #{execution.id}</p>
+						</div>
+					</div>
+					
+					<div class="flex gap-2">
+						{#if execution.status === 'running'}
+							<button 
+								on:click={() => runDevServer()}
+								disabled={devServerRunning}
+								class="bg-green-500 hover:bg-green-600 disabled:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+							>
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								</svg>
+								{devServerRunning ? 'Dev Server Running' : 'Run Dev Server'}
+							</button>
+							
+							{#if devServerRunning}
+								<button 
+									on:click={() => stopDevServer()}
+									class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9l6 6m0-6l-6 6"/>
+									</svg>
+									Stop Dev Server
+								</button>
+							{/if}
+						{/if}
+					</div>
+				</div>
+
+				<!-- Execution Info Grid -->
+				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+					<!-- Execution Details -->
+					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+							</svg>
+							Execution Details
+						</h3>
+						<div class="space-y-3 text-sm">
+							<div class="flex justify-between">
+								<span class="text-gray-400">Status:</span>
+								<span class="font-mono {execution.status === 'completed' ? 'text-green-400' : execution.status === 'running' ? 'text-blue-400' : execution.status === 'failed' ? 'text-red-400' : 'text-gray-400'}">
+									{execution.status}
+								</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-gray-400">Agent:</span>
+								<span class="font-mono text-orange-400">{execution.agent_name || `Agent ${execution.agent_id}`}</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-gray-400">Created:</span>
+								<span class="text-gray-300">{formatDate(execution.created_at)}</span>
+							</div>
+							{#if execution.updated_at}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Updated:</span>
+									<span class="text-gray-300">{formatDate(execution.updated_at)}</span>
+								</div>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Worktree Info -->
+					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+							</svg>
+							Worktree
+						</h3>
+						<div class="space-y-3 text-sm">
+							<div>
+								<span class="text-gray-400 block">Path:</span>
+								<span class="font-mono text-yellow-400 text-xs">{execution.worktree_path || 'N/A'}</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-gray-400">Base Directory:</span>
+								<span class="font-mono text-blue-400">{execution.base_directory_id || 'N/A'}</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Git Status -->
+					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+							</svg>
+							Git Status
+						</h3>
+						{#if gitStatus}
+							<div class="space-y-3 text-sm">
+								<div class="flex justify-between">
+									<span class="text-gray-400">Branch:</span>
+									<span class="font-mono text-green-400">{gitStatus.currentBranch}</span>
+								</div>
+								<div class="flex justify-between">
+									<span class="text-gray-400">Status:</span>
+									<span class="font-mono {gitStatus.isDirty ? 'text-yellow-400' : 'text-green-400'}">
+										{gitStatus.isDirty ? 'Modified' : 'Clean'}
+									</span>
+								</div>
+								{#if gitStatus.ahead || gitStatus.behind}
+									<div class="flex justify-between">
+										<span class="text-gray-400">Sync:</span>
+										<span class="font-mono text-blue-400">
+											{#if gitStatus.ahead}+{gitStatus.ahead}{/if}
+											{#if gitStatus.behind} -{gitStatus.behind}{/if}
+										</span>
+									</div>
+								{/if}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Changes:</span>
+									<span class="font-mono text-gray-300">
+										{gitStatus.staged}S {gitStatus.unstaged}M {gitStatus.untracked}?
+									</span>
+								</div>
+								{#if gitStatus.mergeConflicts}
+									<div class="flex items-center gap-2 text-red-400">
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+										</svg>
+										<span class="text-sm">Merge conflicts</span>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<div class="text-gray-400 text-sm">
+								<p>Git status not available</p>
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Task Description -->
+				{#if execution.task_description}
+					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+						<h3 class="text-lg font-semibold text-white mb-3">Task Description</h3>
+						<p class="text-gray-300">{execution.task_description}</p>
+					</div>
+				{/if}
+			{/if}
+		</div>
+
+		<!-- Terminal -->
+		{#if !loading && !error && execution}
+			<div class="bg-black rounded-lg border border-gray-700 shadow-xl">
+				<div class="flex items-center justify-between p-4 border-b border-gray-700">
+					<div class="flex items-center gap-3">
+						<div class="flex gap-1">
+							<div class="w-3 h-3 rounded-full bg-red-500"></div>
+							<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+							<div class="w-3 h-3 rounded-full bg-green-500"></div>
+						</div>
+						<span class="text-gray-400 text-sm font-mono">task_{execution.task_id}_agent_{execution.agent_id}</span>
+					</div>
+					<div class="flex items-center gap-2 text-xs text-gray-500">
+						<div class="w-2 h-2 rounded-full bg-green-500"></div>
+						<span>Connected</span>
+					</div>
+				</div>
+				<div class="p-4">
+					<div 
+						id="terminal" 
+						bind:this={terminalElement}
+						class="w-full h-[60vh] focus:outline-none"
+					></div>
+				</div>
+			</div>
+			
+			<div class="mt-4 text-sm text-gray-400 text-center">
+				<p>Terminal connected to task execution session</p>
+			</div>
+		{:else if error}
+			<div class="bg-gray-800 rounded-lg border border-red-600 p-8 text-center">
+				<svg class="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+				</svg>
+				<h3 class="text-xl font-semibold text-red-400 mb-2">Task Execution Not Available</h3>
+				<p class="text-gray-400 mb-6">{error}</p>
+				<div class="flex gap-3 justify-center">
+					<a 
+						href="/tasks"
+						class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors"
+					>
+						View All Executions
+					</a>
+					<a 
+						href="/"
+						class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg transition-colors"
+					>
+						Go to Dashboard
+					</a>
+				</div>
+			</div>
+		{/if}
+	</div>
+</div>
