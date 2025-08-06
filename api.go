@@ -745,8 +745,19 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 	
 	log.Printf("Starting task execution %d: Task '%s' with agent '%s'", executionID, task.Title, agent.Name)
 	
+	// Get the base directory for setup commands
+	baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+		ProjectID:       task.ProjectID,
+		BaseDirectoryID: worktree.BaseDirectoryID,
+	})
+	if err != nil {
+		log.Printf("Failed to get base directory: %v", err)
+		updateTaskExecutionStatus(ctx, executionID, "failed")
+		return
+	}
+	
 	// Create the worktree directory
-	err := os.MkdirAll(worktree.Path, 0755)
+	err = os.MkdirAll(worktree.Path, 0755)
 	if err != nil {
 		log.Printf("Failed to create worktree directory %s: %v", worktree.Path, err)
 		updateTaskExecutionStatus(ctx, executionID, "failed")
@@ -777,6 +788,44 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		log.Printf("Failed to update worktree with tmux session: %v", err)
 	}
 	
+	// Function to send command and wait
+	sendCommandAndWait := func(command string, description string) error {
+		log.Printf("Executing %s: %s", description, command)
+		cmd := exec.Command("tmux", "send-keys", "-t", sessionName, command, "Enter")
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("failed to send %s command: %v", description, err)
+		}
+		
+		// Wait a moment for command to execute
+		time.Sleep(2 * time.Second)
+		return nil
+	}
+	
+	// Run git worktree setup if this is a git-initialized base directory
+	if baseDir.GitInitialized {
+		// Set up git worktree
+		worktreeCommand := fmt.Sprintf("git worktree add %s", worktree.Path)
+		// Change to base directory first, then set up worktree
+		if err := sendCommandAndWait(fmt.Sprintf("cd %s", baseDir.Path), "change to base directory"); err != nil {
+			log.Printf("Warning: %v", err)
+		}
+		if err := sendCommandAndWait(worktreeCommand, "git worktree setup"); err != nil {
+			log.Printf("Warning: %v", err)
+		}
+		// Change back to worktree directory
+		if err := sendCommandAndWait(fmt.Sprintf("cd %s", worktree.Path), "change to worktree directory"); err != nil {
+			log.Printf("Warning: %v", err)
+		}
+	}
+	
+	// Run custom worktree setup commands if provided
+	if baseDir.WorktreeSetupCommands != "" {
+		if err := sendCommandAndWait(baseDir.WorktreeSetupCommands, "worktree setup commands"); err != nil {
+			log.Printf("Warning: %v", err)
+		}
+	}
+	
 	// Create a task file with the task details
 	taskContent := fmt.Sprintf(`Task: %s
 
@@ -797,18 +846,14 @@ Instructions:
 	}
 	
 	// Show the task file in the terminal
-	tmuxSendCmd := exec.Command("tmux", "send-keys", "-t", sessionName, fmt.Sprintf("cat %s", taskFilePath), "Enter")
-	err = tmuxSendCmd.Run()
-	if err != nil {
-		log.Printf("Failed to show task file in tmux: %v", err)
+	if err := sendCommandAndWait(fmt.Sprintf("cat %s", taskFilePath), "show task file"); err != nil {
+		log.Printf("Warning: %v", err)
 	}
 	
 	// Start the agent command
 	agentCommand := fmt.Sprintf("%s %s", agent.Command, agent.Params)
-	tmuxAgentCmd := exec.Command("tmux", "send-keys", "-t", sessionName, agentCommand, "Enter")
-	err = tmuxAgentCmd.Run()
-	if err != nil {
-		log.Printf("Failed to start agent command in tmux: %v", err)
+	if err := sendCommandAndWait(agentCommand, "agent command"); err != nil {
+		log.Printf("Failed to start agent: %v", err)
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}

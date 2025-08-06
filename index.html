@@ -21,15 +21,21 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.js"></script>
     <script>
         const term = new Terminal({
             cursorBlink: true,
             fontSize: 14,
             fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+            lineHeight: 1.0,
+            letterSpacing: 0,
+            allowTransparency: false,
         });
 
         const fitAddon = new FitAddon.FitAddon();
+        const canvasAddon = new CanvasAddon.CanvasAddon();
         term.loadAddon(fitAddon);
+        term.loadAddon(canvasAddon);
 
         term.open(document.getElementById('terminal'));
         fitAddon.fit();

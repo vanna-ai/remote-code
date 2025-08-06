@@ -13,6 +13,8 @@
 	let terminalElement;
 	let ws;
 	let term;
+	let fitAddon;
+	let canvasAddon;
 	let loading = true;
 	let showGlobalTerminal = false;
 
@@ -59,7 +61,21 @@
 			ws.close();
 		}
 		if (term) {
-			term.dispose();
+			try {
+				// Dispose addons first to avoid cleanup race conditions
+				if (canvasAddon) {
+					canvasAddon.dispose();
+					canvasAddon = null;
+				}
+				if (fitAddon) {
+					fitAddon.dispose();
+					fitAddon = null;
+				}
+				term.dispose();
+				term = null;
+			} catch (error) {
+				console.warn('Error disposing terminal:', error);
+			}
 		}
 
 		// Load xterm if not already loaded
@@ -72,7 +88,11 @@
 			script2.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js';
 			document.head.appendChild(script2);
 
-			script2.onload = () => createTerminal(sessionType);
+			const script3 = document.createElement('script');
+			script3.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.js';
+			document.head.appendChild(script3);
+
+			script3.onload = () => createTerminal(sessionType);
 		} else {
 			createTerminal(sessionType);
 		}
@@ -83,10 +103,15 @@
 			cursorBlink: true,
 			fontSize: 14,
 			fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+			lineHeight: 1.0,
+			letterSpacing: 0,
+			allowTransparency: false,
 		});
 
-		const fitAddon = new window.FitAddon.FitAddon();
+		fitAddon = new window.FitAddon.FitAddon();
+		canvasAddon = new window.CanvasAddon.CanvasAddon();
 		term.loadAddon(fitAddon);
+		term.loadAddon(canvasAddon);
 
 		term.open(terminalElement);
 		fitAddon.fit();
@@ -130,7 +155,21 @@
 			ws.close();
 		}
 		if (term) {
-			term.dispose();
+			try {
+				// Dispose addons first to avoid cleanup race conditions
+				if (canvasAddon) {
+					canvasAddon.dispose();
+					canvasAddon = null;
+				}
+				if (fitAddon) {
+					fitAddon.dispose();
+					fitAddon = null;
+				}
+				term.dispose();
+				term = null;
+			} catch (error) {
+				console.warn('Error disposing terminal:', error);
+			}
 		}
 		selectedSession = null;
 		showGlobalTerminal = false;
