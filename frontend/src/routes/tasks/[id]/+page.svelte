@@ -29,6 +29,7 @@
 	let inputText = '';
 	let isSendingInput = false;
 	let isResendingTask = false;
+	let isDeleting = false;
 
 	$: executionId = $page.params.id;
 
@@ -437,6 +438,35 @@
 			sendInputToSession();
 		}
 	}
+
+	async function deleteTaskExecution() {
+		if (isDeleting) return;
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n• Kill all associated tmux sessions\n• Remove the worktree directory\n• Run teardown commands\n• Delete all related data\n\nThis action cannot be undone.`);
+		
+		if (!confirmed) return;
+		
+		try {
+			isDeleting = true;
+			const response = await fetch(`/api/task-executions/${executionId}`, {
+				method: 'DELETE'
+			});
+			
+			if (response.ok) {
+				// Navigate back to tasks list
+				goto('/tasks');
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to delete task execution: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to delete task execution:', err);
+			alert('Failed to delete task execution');
+		} finally {
+			isDeleting = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -515,6 +545,22 @@
 								</button>
 							{/if}
 						{/if}
+						
+						<!-- Delete Task Execution Button -->
+						<button 
+							on:click={deleteTaskExecution}
+							disabled={isDeleting}
+							class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+						>
+							{#if isDeleting}
+								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
+							{:else}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+								</svg>
+							{/if}
+							{isDeleting ? 'Deleting...' : 'Delete'}
+						</button>
 					</div>
 				</div>
 

@@ -609,6 +609,28 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 	}
 	
 	switch r.Method {
+	case "DELETE":
+		// Handle task execution deletion
+		if len(pathParts) > 0 {
+			executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+				return
+			}
+			
+			err = deleteTaskExecutionWithCleanup(ctx, executionID)
+			if err != nil {
+				log.Printf("Failed to delete task execution: %v", err)
+				http.Error(w, "Failed to delete task execution", http.StatusInternalServerError)
+				return
+			}
+			
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		
+		http.Error(w, "Task execution ID required", http.StatusBadRequest)
+		
 	case "GET":
 		// Handle individual task execution by ID
 		if len(pathParts) > 0 {
@@ -1466,4 +1488,140 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) error {
+	log.Printf("Starting cleanup for task execution %d", executionID)
+	
+	// Get task execution details with all related information
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	if err != nil {
+		return fmt.Errorf("failed to get task execution details: %v", err)
+	}
+	
+	// Get worktree details
+	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
+	if err != nil {
+		log.Printf("Warning: failed to get worktree details: %v", err)
+		// Continue with cleanup even if we can't get worktree details
+	} else {
+		// Perform tmux session cleanup
+		err = cleanupTmuxSessions(worktree)
+		if err != nil {
+			log.Printf("Warning: failed to cleanup tmux sessions: %v", err)
+		}
+		
+		// Get task details to find project ID
+		task, err := queries.GetTask(ctx, execution.TaskID)
+		if err != nil {
+			log.Printf("Warning: failed to get task details: %v", err)
+		} else {
+			// Get base directory for teardown commands
+			baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+				ProjectID:       task.ProjectID,
+				BaseDirectoryID: execution.BaseDirectoryID,
+			})
+			if err != nil {
+				log.Printf("Warning: failed to get base directory for teardown commands: %v", err)
+			} else {
+				// Run teardown commands
+				err = runTeardownCommands(worktree, baseDir)
+				if err != nil {
+					log.Printf("Warning: failed to run teardown commands: %v", err)
+				}
+				
+				// Cleanup filesystem
+				err = cleanupWorktreeDirectory(worktree, baseDir)
+				if err != nil {
+					log.Printf("Warning: failed to cleanup worktree directory: %v", err)
+				}
+			}
+		}
+		
+		// Delete worktree record from database
+		err = queries.DeleteWorktree(ctx, worktree.ID)
+		if err != nil {
+			log.Printf("Warning: failed to delete worktree from database: %v", err)
+		}
+	}
+	
+	// Delete task execution record from database
+	err = queries.DeleteTaskExecution(ctx, executionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete task execution from database: %v", err)
+	}
+	
+	log.Printf("Successfully cleaned up task execution %d", executionID)
+	return nil
+}
+
+func cleanupTmuxSessions(worktree db.Worktree) error {
+	// Kill agent tmux session if it exists
+	if worktree.AgentTmuxID.Valid && worktree.AgentTmuxID.String != "" {
+		log.Printf("Killing agent tmux session: %s", worktree.AgentTmuxID.String)
+		cmd := exec.Command("tmux", "kill-session", "-t", worktree.AgentTmuxID.String)
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Warning: failed to kill agent tmux session %s: %v", worktree.AgentTmuxID.String, err)
+		}
+	}
+	
+	// Kill dev server tmux session if it exists
+	if worktree.DevServerTmuxID.Valid && worktree.DevServerTmuxID.String != "" {
+		log.Printf("Killing dev server tmux session: %s", worktree.DevServerTmuxID.String)
+		cmd := exec.Command("tmux", "kill-session", "-t", worktree.DevServerTmuxID.String)
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("Warning: failed to kill dev server tmux session %s: %v", worktree.DevServerTmuxID.String, err)
+		}
+	}
+	
+	return nil
+}
+
+func runTeardownCommands(worktree db.Worktree, baseDir db.BaseDirectory) error {
+	// Run dev server teardown commands if they exist
+	if baseDir.DevServerTeardownCommands != "" {
+		log.Printf("Running dev server teardown commands: %s", baseDir.DevServerTeardownCommands)
+		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", worktree.Path, baseDir.DevServerTeardownCommands))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Warning: dev server teardown commands failed: %v, output: %s", err, string(output))
+		}
+	}
+	
+	// Run worktree teardown commands if they exist
+	if baseDir.WorktreeTeardownCommands != "" {
+		log.Printf("Running worktree teardown commands: %s", baseDir.WorktreeTeardownCommands)
+		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", worktree.Path, baseDir.WorktreeTeardownCommands))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Warning: worktree teardown commands failed: %v, output: %s", err, string(output))
+		}
+	}
+	
+	return nil
+}
+
+func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) error {
+	// If this was a git worktree, remove it from git first
+	if baseDir.GitInitialized {
+		log.Printf("Removing git worktree: %s", worktree.Path)
+		
+		// Change to base directory and remove the git worktree
+		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && git worktree remove --force %s", baseDir.Path, worktree.Path))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Warning: failed to remove git worktree: %v, output: %s", err, string(output))
+		}
+	}
+	
+	// Remove the worktree directory from filesystem
+	log.Printf("Removing worktree directory: %s", worktree.Path)
+	err := os.RemoveAll(worktree.Path)
+	if err != nil {
+		return fmt.Errorf("failed to remove worktree directory %s: %v", worktree.Path, err)
+	}
+	
+	return nil
 }

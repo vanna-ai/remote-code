@@ -14,6 +14,7 @@
 	let agents = [];
 	let worktrees = [];
 	let newExecution = { taskId: '', agentId: '', worktreeId: '' };
+	let deletingExecutions = new Set();
 
 	onMount(async () => {
 		await loadTaskExecutions();
@@ -135,6 +136,38 @@
 		const worktree = worktrees.find(w => w.id === worktreeId);
 		return worktree ? worktree.path : `Worktree ${worktreeId}`;
 	}
+
+	async function deleteTaskExecution(executionId) {
+		if (deletingExecutions.has(executionId)) return;
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n• Kill all associated tmux sessions\n• Remove the worktree directory\n• Run teardown commands\n• Delete all related data\n\nThis action cannot be undone.`);
+		
+		if (!confirmed) return;
+		
+		try {
+			// Add to deleting set to show loading state
+			deletingExecutions = new Set([...deletingExecutions, executionId]);
+			
+			const response = await fetch(`/api/task-executions/${executionId}`, {
+				method: 'DELETE'
+			});
+			
+			if (response.ok) {
+				// Reload task executions to reflect the deletion
+				await loadTaskExecutions();
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to delete task execution: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to delete task execution:', err);
+			alert('Failed to delete task execution');
+		} finally {
+			// Remove from deleting set
+			deletingExecutions = new Set([...deletingExecutions].filter(id => id !== executionId));
+		}
+	}
 </script>
 
 <svelte:head>
@@ -232,6 +265,20 @@
 										Stop
 									</button>
 								{/if}
+								<button 
+									on:click={() => deleteTaskExecution(execution.id)}
+									disabled={deletingExecutions.has(execution.id)}
+									class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-3 py-1 rounded text-sm transition-colors flex items-center gap-1"
+								>
+									{#if deletingExecutions.has(execution.id)}
+										<div class="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+									{:else}
+										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+										</svg>
+									{/if}
+									Delete
+								</button>
 							</div>
 						</div>
 					</div>
