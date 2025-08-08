@@ -80,15 +80,15 @@
 		};
 	});
 
-	async function loadTaskExecutionDetails() {
-		try {
-			loading = true;
-			error = null;
-			
-			// Get task execution details with all related information
-			const response = await fetch(`/api/task-executions/${executionId}`);
-			if (response.ok) {
-				execution = await response.json();
+    async function loadTaskExecutionDetails() {
+        try {
+            loading = true;
+            error = null;
+            
+            // Get task execution details with all related information
+            const response = await fetch(`/api/task-executions/${executionId}`);
+            if (response.ok) {
+                execution = await response.json();
 				
 				// Check if dev server is running
 				if (execution.worktree_id) {
@@ -100,8 +100,10 @@
 					}
 				}
 				
-				// Load git status for the worktree
-				await loadGitStatus();
+            // Load git status and branches, then base branch for default selection
+            await loadGitStatus();
+            await loadBranches();
+            await loadBaseBranchDefault();
 				
 				// Initialize terminal once we have execution info
 				initializeTerminal();
@@ -121,25 +123,135 @@
 		}
 	}
 
-	async function loadGitStatus() {
-		if (!execution?.worktree_path) return;
-		
-		try {
-			// We'll need to create a git status endpoint - for now mock the data
-			gitStatus = {
-				currentBranch: "feature/task-executions",
-				isDirty: true,
-				ahead: 2,
-				behind: 0,
-				staged: 3,
-				unstaged: 1,
-				untracked: 2,
-				mergeConflicts: false
-			};
-		} catch (err) {
-			console.error('Failed to load git status:', err);
-		}
-	}
+    async function loadGitStatus() {
+        if (!execution?.worktree_path) return;
+        try {
+            const res = await fetch(`/api/git/status?path=${encodeURIComponent(execution.worktree_path)}`);
+            if (res.ok) {
+                gitStatus = await res.json();
+            } else {
+                gitStatus = null;
+            }
+        } catch (err) {
+            console.error('Failed to load git status:', err);
+        }
+    }
+
+    async function stageFile(file) {
+        if (!execution?.worktree_path) return;
+        await fetch(`/api/git/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: execution.worktree_path, file })
+        });
+        await loadGitStatus();
+    }
+
+    async function unstageFile(file) {
+        if (!execution?.worktree_path) return;
+        await fetch(`/api/git/unstage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: execution.worktree_path, file })
+        });
+        await loadGitStatus();
+    }
+
+    let diffOpen = false;
+    let diffText = '';
+    let diffTitle = '';
+
+    async function viewDiff(file, staged=false) {
+        if (!execution?.worktree_path) return;
+        const url = `/api/git/diff?path=${encodeURIComponent(execution.worktree_path)}&file=${encodeURIComponent(file)}&staged=${staged}`;
+        const res = await fetch(url);
+        if (res.ok) {
+            const data = await res.json();
+            diffText = data.diff || '';
+            diffTitle = `${staged ? 'Index vs HEAD' : 'Working Tree vs Index'} — ${file}`;
+            diffOpen = true;
+        }
+    }
+
+    let commitMsg = '';
+    let committing = false;
+    async function commitChanges() {
+        if (!execution?.worktree_path || !commitMsg.trim()) return;
+        committing = true;
+        try {
+            await fetch(`/api/git/commit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: execution.worktree_path, message: commitMsg })
+            });
+            commitMsg = '';
+            await loadGitStatus();
+        } finally {
+            committing = false;
+        }
+    }
+
+	let mergeBranchName = '';
+	let merging = false;
+    let branches = [];
+    let loadingBranches = false;
+    async function mergeBranch() {
+        if (!execution?.worktree_path || !mergeBranchName.trim()) return;
+        merging = true;
+        try {
+            await fetch(`/api/git/merge`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: execution.worktree_path, branch: mergeBranchName })
+            });
+            mergeBranchName = '';
+            await loadGitStatus();
+        } finally {
+            merging = false;
+        }
+    }
+
+    async function loadBaseBranchDefault() {
+        try {
+            if (!execution?.worktree_path) return;
+            if (mergeBranchName && mergeBranchName.trim().length > 0) return; // do not override user input
+            const res = await fetch(`/api/git/base-branch?path=${encodeURIComponent(execution.worktree_path)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.branch) {
+                    mergeBranchName = data.branch;
+                }
+            }
+        } catch (e) {
+            // ignore and keep empty
+            console.warn('Failed to load base branch', e);
+        }
+    }
+
+    async function loadBranches() {
+        if (!execution?.worktree_path) return;
+        loadingBranches = true;
+        try {
+            const res = await fetch(`/api/git/branches?path=${encodeURIComponent(execution.worktree_path)}&includeRemotes=true`);
+            if (res.ok) {
+                const data = await res.json();
+                branches = Array.isArray(data?.branches) ? data.branches : [];
+                // If no selection yet, prefer base branch, else first branch
+                if (!mergeBranchName) {
+                    if (branches.includes(mergeBranchName)) {
+                        // keep
+                    } else if (branches.length > 0) {
+                        // Temporarily defer to base-branch when it loads
+                        mergeBranchName = branches[0];
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load branches', e);
+        } finally {
+            loadingBranches = false;
+        }
+    }
 
 	function initializeTerminal() {
 		// Load xterm if not already loaded
@@ -698,7 +810,126 @@
 			{/if}
 		</div>
 
-		<!-- Terminal -->
+    <!-- Git Panel -->
+    {#if !loading && !error && execution && gitStatus}
+        <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-sm text-gray-300">Branch</span>
+                    <span class="px-2 py-1 rounded text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500">{gitStatus.currentBranch}</span>
+                    {#if gitStatus.ahead || gitStatus.behind}
+                        <span class="text-xs text-gray-400">{gitStatus.ahead ? `↑ ${gitStatus.ahead}` : ''} {gitStatus.behind ? `↓ ${gitStatus.behind}` : ''}</span>
+                    {/if}
+                </div>
+                <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600" on:click={loadGitStatus}>Refresh</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-green-400"></span>
+                        <span>Staged</span>
+                    </h4>
+                    {#if gitStatus.stagedFiles?.length}
+                        {#each gitStatus.stagedFiles as f}
+                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate">{f.path}</span>
+                                <div class="flex items-center gap-2">
+                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => viewDiff(f.path, true)}>Diff</button>
+                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => unstageFile(f.path)}>Unstage</button>
+                                </div>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="text-xs text-gray-500">No staged changes</div>
+                    {/if}
+                </div>
+                <div>
+                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-orange-400"></span>
+                        <span>Changes</span>
+                    </h4>
+                    {#if gitStatus.unstagedFiles?.length}
+                        {#each gitStatus.unstagedFiles as f}
+                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate">{f.path}</span>
+                                <div class="flex items-center gap-2">
+                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => viewDiff(f.path, false)}>Diff</button>
+                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => stageFile(f.path)}>Stage</button>
+                                </div>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="text-xs text-gray-500">No unstaged changes</div>
+                    {/if}
+                </div>
+                <div>
+                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                        <span>Untracked</span>
+                    </h4>
+                    {#if gitStatus.untrackedFiles?.length}
+                        {#each gitStatus.untrackedFiles as f}
+                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate">{f.path}</span>
+                                <div class="flex items-center gap-2">
+                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => stageFile(f.path)}>Add</button>
+                                </div>
+                            </div>
+                        {/each}
+                    {:else}
+                        <div class="text-xs text-gray-500">No untracked files</div>
+                    {/if}
+                </div>
+            </div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex gap-2">
+                    <input class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm" placeholder="Commit message" bind:value={commitMsg} />
+                    <button class="px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-sm disabled:bg-gray-600" disabled={committing || !commitMsg.trim()} on:click={commitChanges}>Commit</button>
+                </div>
+                <div class="flex gap-2 items-center">
+                    {#if loadingBranches}
+                        <div class="text-xs text-gray-400">Loading branches…</div>
+                    {:else}
+                        <select class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
+                                bind:value={mergeBranchName}>
+                            {#each branches as b}
+                                <option value={b}>{b}</option>
+                            {/each}
+                            {#if mergeBranchName && !branches.includes(mergeBranchName)}
+                                <option value={mergeBranchName}>{mergeBranchName}</option>
+                            {/if}
+                        </select>
+                        <button class="px-2 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                                aria-label="Refresh branches"
+                                title="Refresh branches"
+                                on:click={loadBranches}>
+                            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M5 19A9 9 0 0119 5l1 1"/>
+                            </svg>
+                        </button>
+                    {/if}
+                    <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm disabled:bg-gray-600" disabled={merging || !mergeBranchName.trim()} on:click={mergeBranch}>Merge</button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- Diff Modal -->
+    {#if diffOpen}
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div class="bg-gray-900 border border-gray-700 rounded-lg w-[90vw] max-w-4xl max-h-[80vh] overflow-hidden">
+                <div class="flex items-center justify-between p-3 border-b border-gray-700">
+                    <div class="text-sm text-gray-300 truncate">{diffTitle}</div>
+                    <button class="text-gray-400 hover:text-white" on:click={() => diffOpen = false}>✕</button>
+                </div>
+                <div class="p-3 overflow-auto">
+                    <pre class="text-xs leading-snug whitespace-pre-wrap">{diffText || 'No diff'}</pre>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- Terminal -->
 		{#if !loading && !error && execution}
 			<div class="bg-black rounded-lg border border-gray-700 shadow-xl">
 				<div class="flex items-center justify-between p-4 border-b border-gray-700">

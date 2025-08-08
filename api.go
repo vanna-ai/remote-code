@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+    "path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,472 @@ import (
 	
 	"github.com/robert-nix/ansihtml"
 )
+
+// -----------------
+// Git API utilities
+// -----------------
+
+type GitFile struct {
+    Path    string `json:"path"`
+    X       string `json:"x"`     // Index status
+    Y       string `json:"y"`     // Worktree status
+    Staged  bool   `json:"staged"`
+}
+
+type GitStatus struct {
+    CurrentBranch  string    `json:"currentBranch"`
+    Upstream       string    `json:"upstream"`
+    Ahead          int       `json:"ahead"`
+    Behind         int       `json:"behind"`
+    IsDirty        bool      `json:"isDirty"`
+    StagedFiles    []GitFile `json:"stagedFiles"`
+    UnstagedFiles  []GitFile `json:"unstagedFiles"`
+    UntrackedFiles []GitFile `json:"untrackedFiles"`
+    MergeConflicts []GitFile `json:"mergeConflicts"`
+}
+
+func runGit(dir string, args ...string) (string, int, error) {
+    cmd := exec.Command("git", args...)
+    cmd.Dir = dir
+    out, err := cmd.CombinedOutput()
+    if err != nil {
+        if exitErr, ok := err.(*exec.ExitError); ok {
+            return string(out), exitErr.ExitCode(), err
+        }
+        return string(out), -1, err
+    }
+    return string(out), 0, nil
+}
+
+func parsePorcelainStatus(output string) (staged, unstaged, untracked, conflicts []GitFile) {
+    lines := strings.Split(output, "\x00")
+    for _, line := range lines {
+        if line == "" {
+            continue
+        }
+
+        // Porcelain -z format: XY<space>PATH (optionally with rename -> PATH\tPATH)
+        if len(line) < 3 {
+            continue
+        }
+        x := string(line[0])
+        y := string(line[1])
+        rest := strings.TrimSpace(line[2:])
+        path := rest
+        if strings.Contains(rest, "\t") {
+            parts := strings.SplitN(rest, "\t", 2)
+            path = parts[1] // show new path for renames
+        }
+
+        gf := GitFile{Path: path, X: x, Y: y}
+
+        // Untracked
+        if x == "?" && y == "?" {
+            untracked = append(untracked, gf)
+            continue
+        }
+
+        // Conflicts: both modified or special states (e.g., UU, AA, DD)
+        if (x == "U" || y == "U") || (x == "A" && y == "A") || (x == "D" && y == "D") {
+            conflicts = append(conflicts, gf)
+            continue
+        }
+
+        // Staged if index has changes
+        if x != " " && x != "?" {
+            gf.Staged = true
+            staged = append(staged, gf)
+        }
+
+        // Unstaged if worktree has changes
+        if y != " " && y != "?" {
+            gf.Staged = false
+            unstaged = append(unstaged, gf)
+        }
+    }
+    return
+}
+
+func getGitStatus(dir string) (*GitStatus, int, string, error) {
+    // Branch and ahead/behind via -sb
+    short, _, err := runGit(dir, "status", "-sb")
+    if err != nil {
+        return nil, 1, short, err
+    }
+
+    // Files via porcelain -z
+    porcelain, _, err := runGit(dir, "status", "--porcelain=1", "-z")
+    if err != nil {
+        return nil, 1, porcelain, err
+    }
+
+    status := &GitStatus{StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}}
+
+    // Parse branch line: e.g., "## main...origin/main [ahead 1]"
+    for _, line := range strings.Split(strings.TrimSpace(short), "\n") {
+        if strings.HasPrefix(line, "## ") {
+            meta := strings.TrimPrefix(line, "## ")
+            // Split branch...upstream and position info
+            parts := strings.Split(meta, "...")
+            status.CurrentBranch = strings.Split(parts[0], " ")[0]
+            if len(parts) > 1 {
+                rest := parts[1]
+                segs := strings.SplitN(rest, " ", 2)
+                status.Upstream = strings.TrimSpace(segs[0])
+                if len(segs) > 1 {
+                    pos := segs[1]
+                    if strings.Contains(pos, "ahead ") {
+                        fmt.Sscanf(pos, "[ahead %d]", &status.Ahead)
+                    }
+                    if strings.Contains(pos, "behind ") {
+                        // supports formats like [ahead 1, behind 2]
+                        fmt.Sscanf(pos, "[behind %d]", &status.Behind)
+                        var a, b int
+                        if strings.Contains(pos, "ahead ") && strings.Contains(pos, "behind ") {
+                            fmt.Sscanf(pos, "[ahead %d, behind %d]", &a, &b)
+                            status.Ahead = a
+                            status.Behind = b
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    staged, unstaged, untracked, conflicts := parsePorcelainStatus(porcelain)
+    status.StagedFiles = staged
+    status.UnstagedFiles = unstaged
+    status.UntrackedFiles = untracked
+    status.MergeConflicts = conflicts
+    status.IsDirty = len(staged) > 0 || len(unstaged) > 0 || len(untracked) > 0 || len(conflicts) > 0
+
+    return status, 0, "", nil
+}
+
+func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pathParts []string) {
+    if len(pathParts) == 0 {
+        json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid git endpoint"})
+        return
+    }
+
+    // For GET endpoints we accept ?path=...; for POST we read from JSON body.
+    // Each branch validates presence of path and returns JSON-form errors.
+
+    switch pathParts[0] {
+    case "status":
+        if r.Method != http.MethodGet {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        dir := r.URL.Query().Get("path")
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        st, code, stdout, err := getGitStatus(dir)
+        if err != nil && st == nil {
+            // Likely not a repo or other error
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "error":   err.Error(),
+                "code":    code,
+                "output":  stdout,
+            })
+            return
+        }
+        json.NewEncoder(w).Encode(st)
+
+    case "diff":
+        if r.Method != http.MethodGet {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        dir := r.URL.Query().Get("path")
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        file := r.URL.Query().Get("file")
+        staged := r.URL.Query().Get("staged") == "true"
+        args := []string{"diff"}
+        if staged {
+            args = append(args, "--staged")
+        }
+        if file != "" {
+            args = append(args, "--", file)
+        }
+        out, _, err := runGit(dir, args...)
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"diff": out})
+
+    case "add":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path string `json:"path"`
+            File string `json:"file"`
+            All  bool   `json:"all"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+            return
+        }
+        dir := body.Path
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        var args []string
+        if body.All {
+            args = []string{"add", "-A"}
+        } else if body.File != "" {
+            args = []string{"add", "--", body.File}
+        } else {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing file or all flag"})
+            return
+        }
+        out, _, err := runGit(dir, args...)
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+
+    case "unstage":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path string `json:"path"`
+            File string `json:"file"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.File == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires file"})
+            return
+        }
+        dir := body.Path
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        out, _, err := runGit(dir, "restore", "--staged", "--", body.File)
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+
+    case "commit":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path    string `json:"path"`
+            Message string `json:"message"`
+            Amend   bool   `json:"amend"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires message"})
+            return
+        }
+        dir := body.Path
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        args := []string{"commit", "-m", body.Message}
+        if body.Amend {
+            args = append(args, "--amend")
+        }
+        out, code, err := runGit(dir, args...)
+        if err != nil {
+            // No changes to commit or other error
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "code": code, "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+
+    case "merge":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path   string `json:"path"`
+            Branch string `json:"branch"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
+            return
+        }
+        dir := body.Path
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        out, code, err := runGit(dir, "merge", body.Branch)
+        if err != nil {
+            // Merge conflicts return non-zero; surface output
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "code": code, "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+
+    case "branches":
+        if r.Method != http.MethodGet {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        dir := r.URL.Query().Get("path")
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        includeRemotes := r.URL.Query().Get("includeRemotes") == "true"
+        out, _, err := runGit(dir, "branch", "--format", "%(refname:short)")
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list branches"})
+            return
+        }
+        var branches []string
+        for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+            if strings.TrimSpace(line) != "" {
+                branches = append(branches, strings.TrimSpace(line))
+            }
+        }
+        if includeRemotes {
+            outR, _, err := runGit(dir, "branch", "-r", "--format", "%(refname:short)")
+            if err == nil {
+                for _, line := range strings.Split(strings.TrimSpace(outR), "\n") {
+                    n := strings.TrimSpace(line)
+                    if n == "" {
+                        continue
+                    }
+                    if n == "origin/HEAD" { // skip symbolic default pointer
+                        continue
+                    }
+                    branches = append(branches, n)
+                }
+            }
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"branches": branches})
+
+    case "checkout":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path   string `json:"path"`
+            Branch string `json:"branch"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
+            return
+        }
+        dir := body.Path
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        out, _, err := runGit(dir, "checkout", body.Branch)
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+
+    case "base-branch":
+        if r.Method != http.MethodGet {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        dir := r.URL.Query().Get("path")
+        if dir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        // Resolve base repository path from any worktree dir via git-common-dir
+        commonDirOut, _, err := runGit(dir, "rev-parse", "--git-common-dir")
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
+            return
+        }
+        gitDir := strings.TrimSpace(commonDirOut)
+        basePath := filepath.Dir(gitDir)
+        // List worktrees in base repo and find the base worktree entry
+        wtOut, _, err := runGit(basePath, "worktree", "list", "--porcelain")
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list worktrees"})
+            return
+        }
+        var currentWT string
+        var baseBranch string
+        for _, line := range strings.Split(wtOut, "\n") {
+            if strings.HasPrefix(line, "worktree ") {
+                currentWT = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+            } else if strings.HasPrefix(line, "branch ") && currentWT != "" {
+                br := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+                br = strings.TrimPrefix(br, "refs/heads/")
+                if currentWT == basePath {
+                    baseBranch = br
+                    break
+                }
+            }
+        }
+        if baseBranch == "" {
+            // Fallback: try symbolic-ref on base path
+            ref, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+            if err == nil {
+                baseBranch = strings.TrimSpace(ref)
+            }
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"basePath": basePath, "branch": baseBranch})
+
+    default:
+        w.WriteHeader(http.StatusNotFound)
+        json.NewEncoder(w).Encode(map[string]interface{}{"error": "Unknown git action"})
+    }
+}
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
@@ -59,6 +526,8 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTaskExecutionsAPI(w, r, ctx, pathParts[1:])
 	case "tmux-sessions":
 		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
+	case "git":
+		handleGitAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -1776,4 +2245,3 @@ func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) er
 	
 	return nil
 }
-
