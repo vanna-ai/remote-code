@@ -342,19 +342,173 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pat
             json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
             return
         }
-        dir := body.Path
-        if dir == "" {
+        worktreeDir := body.Path
+        if worktreeDir == "" {
             w.WriteHeader(http.StatusBadRequest)
             json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
             return
         }
-        out, code, err := runGit(dir, "merge", body.Branch)
+
+        // Resolve base repository path from any worktree dir via git-common-dir
+        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
         if err != nil {
-            // Merge conflicts return non-zero; surface output
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "code": code, "output": out})
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
             return
         }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+        gitDir := strings.TrimSpace(commonDirOut)
+        basePath := filepath.Dir(gitDir)
+
+        // Step 1: Ensure we are on main
+        headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "check_branch",
+                "error":  "Failed to detect current branch",
+                "output": headOut,
+            })
+            return
+        }
+        currentBranch := strings.TrimSpace(headOut)
+        if currentBranch != "main" {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":    false,
+                "step":  "check_branch",
+                "error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
+            })
+            return
+        }
+
+        // Step 2: Ensure working tree is clean
+        statusOut, _, err := runGit(basePath, "status", "--porcelain")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "check_clean",
+                "error":  "Failed to check status",
+                "output": statusOut,
+            })
+            return
+        }
+        if strings.TrimSpace(statusOut) != "" {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "check_clean",
+                "error":  "Working tree not clean on main",
+                "output": statusOut,
+            })
+            return
+        }
+
+        // Step 3: Fetch origin
+        fetchOut, code, err := runGit(basePath, "fetch", "origin")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "fetch",
+                "code":   code,
+                "error":  "git fetch failed",
+                "output": fetchOut,
+            })
+            return
+        }
+
+        // Step 4: Merge fast-forward only into main
+        mergeOut, code, err := runGit(basePath, "merge", "--ff-only", body.Branch)
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "merge",
+                "code":   code,
+                "error":  "git merge failed",
+                "output": mergeOut,
+            })
+            return
+        }
+
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "ok":     true,
+            "output": mergeOut,
+        })
+
+    case "push":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path string `json:"path"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+            return
+        }
+        worktreeDir := body.Path
+        if worktreeDir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+
+        // Resolve base repository path
+        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
+            return
+        }
+        gitDir := strings.TrimSpace(commonDirOut)
+        basePath := filepath.Dir(gitDir)
+
+        // Ensure we are on main
+        headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "check_branch",
+                "error":  "Failed to detect current branch",
+                "output": headOut,
+            })
+            return
+        }
+        currentBranch := strings.TrimSpace(headOut)
+        if currentBranch != "main" {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":    false,
+                "step":  "check_branch",
+                "error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
+            })
+            return
+        }
+
+        // Ensure there is an upstream
+        upstreamOut, _, err := runGit(basePath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "check_upstream",
+                "error":  "No upstream configured for main",
+            })
+            return
+        }
+        _ = strings.TrimSpace(upstreamOut) // e.g., origin/main
+
+        // Push to upstream
+        pushOut, code, err := runGit(basePath, "push")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "ok":     false,
+                "step":   "push",
+                "code":   code,
+                "error":  "git push failed",
+                "output": pushOut,
+            })
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": pushOut})
 
     case "branches":
         if r.Method != http.MethodGet {

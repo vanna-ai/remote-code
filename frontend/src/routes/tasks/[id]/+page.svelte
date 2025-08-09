@@ -193,21 +193,57 @@
 
 	let mergeBranchName = '';
 	let merging = false;
+    let pushing = false;
     let branches = [];
     let loadingBranches = false;
     async function mergeBranch() {
         if (!execution?.worktree_path || !mergeBranchName.trim()) return;
         merging = true;
         try {
-            await fetch(`/api/git/merge`, {
+            const res = await fetch(`/api/git/merge`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: execution.worktree_path, branch: mergeBranchName })
             });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (e) {
+                // ignore
+            }
+            if (!res.ok || (data && data.ok === false)) {
+                const details = data?.error || data?.output || 'Unknown error';
+                const step = data?.step ? ` (step: ${data.step})` : '';
+                alert(`Merge failed${step}: ${details}`);
+                return;
+            }
             mergeBranchName = '';
             await loadGitStatus();
         } finally {
             merging = false;
+        }
+    }
+
+    async function pushChanges() {
+        if (!execution?.worktree_path) return;
+        pushing = true;
+        try {
+            const res = await fetch(`/api/git/push`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: execution.worktree_path })
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) {}
+            if (!res.ok || (data && data.ok === false)) {
+                const details = data?.error || data?.output || 'Unknown error';
+                const step = data?.step ? ` (step: ${data.step})` : '';
+                alert(`Push failed${step}: ${details}`);
+                return;
+            }
+            await loadGitStatus();
+        } finally {
+            pushing = false;
         }
     }
 
@@ -821,7 +857,17 @@
                         <span class="text-xs text-gray-400">{gitStatus.ahead ? `↑ ${gitStatus.ahead}` : ''} {gitStatus.behind ? `↓ ${gitStatus.behind}` : ''}</span>
                     {/if}
                 </div>
-                <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600" on:click={loadGitStatus}>Refresh</button>
+                <div class="flex items-center gap-2">
+                    <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600" on:click={loadGitStatus}>Refresh</button>
+                    <button
+                        class="text-xs px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed"
+                        disabled={pushing || !gitStatus.upstream || gitStatus.ahead === 0}
+                        on:click={pushChanges}
+                        title={(!gitStatus.upstream ? 'No upstream configured' : (gitStatus.ahead === 0 ? 'Nothing to push' : 'Push to upstream'))}
+                    >
+                        {pushing ? 'Pushing…' : 'Push'}
+                    </button>
+                </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
