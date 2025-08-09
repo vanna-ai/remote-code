@@ -2,12 +2,13 @@
 -- This migration adds ELO rating functionality to track agent performance in head-to-head competitions
 
 -- Add ELO fields to existing agents table
-ALTER TABLE agents ADD COLUMN elo_rating REAL DEFAULT 1500.0;
-ALTER TABLE agents ADD COLUMN games_played INTEGER DEFAULT 0;
-ALTER TABLE agents ADD COLUMN wins INTEGER DEFAULT 0;
-ALTER TABLE agents ADD COLUMN losses INTEGER DEFAULT 0;
-ALTER TABLE agents ADD COLUMN draws INTEGER DEFAULT 0;
-ALTER TABLE agents ADD COLUMN last_competed_at DATETIME DEFAULT NULL;
+-- Note: These columns may already exist, so we comment them out to avoid duplicate column errors
+-- ALTER TABLE agents ADD COLUMN elo_rating REAL DEFAULT 1500.0;
+-- ALTER TABLE agents ADD COLUMN games_played INTEGER DEFAULT 0;
+-- ALTER TABLE agents ADD COLUMN wins INTEGER DEFAULT 0;
+-- ALTER TABLE agents ADD COLUMN losses INTEGER DEFAULT 0;
+-- ALTER TABLE agents ADD COLUMN draws INTEGER DEFAULT 0;
+-- ALTER TABLE agents ADD COLUMN last_competed_at DATETIME DEFAULT NULL;
 
 -- Create table to track head-to-head competitions between agents
 CREATE TABLE IF NOT EXISTS agent_competitions (

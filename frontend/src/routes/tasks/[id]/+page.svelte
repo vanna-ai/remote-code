@@ -43,11 +43,11 @@
 			loadGitStatus();
 		}, 1000);
 		
-		// Periodically refresh task execution details to update waiting status
+		// Periodically refresh task execution status to update waiting status (lightweight)
 		const executionRefreshInterval = setInterval(async () => {
 			// Only refresh if not currently loading to avoid conflicts
 			if (!loading) {
-				await loadTaskExecutionDetails();
+				await refreshExecutionStatus();
 			}
 		}, 10000); // Refresh every 10 seconds
 		
@@ -125,11 +125,13 @@
             // Load git status (used for merge and push controls)
             await loadGitStatus();
 				
-				// Initialize terminal once we have execution info
-				initializeTerminal();
+				// Initialize terminal once we have execution info (only if not already initialized)
+				if (!term) {
+					initializeTerminal();
+				}
 				
-				// Initialize dev terminal if dev server is running
-				if (showDevTerminal) {
+				// Initialize dev terminal if dev server is running (only if not already initialized)
+				if (showDevTerminal && !devTerm) {
 					initializeDevTerminal();
 				}
 			} else {
@@ -140,6 +142,29 @@
 			error = 'Failed to load task execution details';
 		} finally {
 			loading = false;
+		}
+	}
+
+	// Lightweight function to refresh only the execution status without causing flicker
+	async function refreshExecutionStatus() {
+		if (!execution) return;
+		
+		try {
+			// Get task execution details without setting loading state
+			const response = await fetch(`/api/task-executions/${executionId}`);
+			if (response.ok) {
+				const updatedExecution = await response.json();
+				// Only update specific fields that might change status
+				if (execution) {
+					execution.status = updatedExecution.status;
+					execution.updated_at = updatedExecution.updated_at;
+					// Update the execution object reactively
+					execution = { ...execution, status: updatedExecution.status, updated_at: updatedExecution.updated_at };
+				}
+			}
+		} catch (err) {
+			// Silently fail - this is just a status check
+			console.warn('Failed to refresh execution status:', err);
 		}
 	}
 
