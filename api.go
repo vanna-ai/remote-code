@@ -2073,12 +2073,55 @@ func loadTasksForProject(ctx context.Context, projectID int64, baseDirs []BaseDi
 }
 
 func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, projectID int64, directoryIDParam string) {
-	switch r.Method {
-	case "DELETE":
-		// Find the directory by base_directory_id and project_id
-		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
-		if err != nil {
-			http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
+    switch r.Method {
+    case "PUT":
+        // Update an existing base directory identified by its external ID within a project
+        // First, fetch the existing directory to get its internal numeric ID
+        existing, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+            ProjectID:       projectID,
+            BaseDirectoryID: directoryIDParam,
+        })
+        if err != nil {
+            http.Error(w, "Base directory not found", http.StatusNotFound)
+            return
+        }
+
+        // Parse update payload
+        var updateReq struct {
+            Path                      string `json:"path"`
+            GitInitialized            bool   `json:"gitInitialized"`
+            WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
+            WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
+            DevServerSetupCommands    string `json:"devServerSetupCommands"`
+            DevServerTeardownCommands string `json:"devServerTeardownCommands"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+            http.Error(w, "Invalid JSON", http.StatusBadRequest)
+            return
+        }
+
+        updated, err := queries.UpdateBaseDirectory(ctx, db.UpdateBaseDirectoryParams{
+            ID:                        existing.ID,
+            Path:                      updateReq.Path,
+            GitInitialized:            updateReq.GitInitialized,
+            WorktreeSetupCommands:     updateReq.WorktreeSetupCommands,
+            WorktreeTeardownCommands:  updateReq.WorktreeTeardownCommands,
+            DevServerSetupCommands:    updateReq.DevServerSetupCommands,
+            DevServerTeardownCommands: updateReq.DevServerTeardownCommands,
+        })
+        if err != nil {
+            log.Printf("Failed to update base directory %d: %v", existing.ID, err)
+            http.Error(w, "Failed to update base directory", http.StatusInternalServerError)
+            return
+        }
+
+        json.NewEncoder(w).Encode(dbBaseDirectoryToBaseDirectory(updated))
+
+    case "DELETE":
+        // Find the directory by base_directory_id and project_id
+        dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+        if err != nil {
+            http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
 			return
 		}
 		

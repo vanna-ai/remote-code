@@ -24,6 +24,15 @@
 		devServerSetupCommands: '',
 		devServerTeardownCommands: ''
 	};
+	let editingDirectoryId = '';
+	let editDirectory = { 
+		path: '', 
+		gitInitialized: false,
+		worktreeSetupCommands: '',
+		worktreeTeardownCommands: '',
+		devServerSetupCommands: '',
+		devServerTeardownCommands: ''
+	};
 	let selectedTask = null;
 	let showTaskModal = false;
 	let availableAgents = [];
@@ -279,6 +288,52 @@
 		} catch (error) {
 			console.error('Failed to delete directory:', error);
 			alert('Failed to delete directory. Please try again.');
+		}
+	}
+
+	function startEditDirectory(dir) {
+		editingDirectoryId = dir.base_directory_id;
+		editDirectory = {
+			path: dir.path,
+			gitInitialized: (dir.gitInitialized ?? dir.git_initialized) || false,
+			worktreeSetupCommands: dir.worktreeSetupCommands ?? dir.worktree_setup_commands ?? '',
+			worktreeTeardownCommands: dir.worktreeTeardownCommands ?? dir.worktree_teardown_commands ?? '',
+			devServerSetupCommands: dir.devServerSetupCommands ?? dir.dev_server_setup_commands ?? '',
+			devServerTeardownCommands: dir.devServerTeardownCommands ?? dir.dev_server_teardown_commands ?? ''
+		};
+	}
+
+	function cancelEditDirectory() {
+		editingDirectoryId = '';
+		editDirectory = { 
+			path: '', 
+			gitInitialized: false,
+			worktreeSetupCommands: '',
+			worktreeTeardownCommands: '',
+			devServerSetupCommands: '',
+			devServerTeardownCommands: ''
+		};
+	}
+
+	async function saveEditDirectory() {
+		if (!editingDirectoryId) return;
+		try {
+			const url = `/api/projects/${projectId}/base-directories/${editingDirectoryId}`;
+			const response = await fetch(url, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(editDirectory)
+			});
+			if (!response.ok) {
+				const text = await response.text();
+				console.error('Update failed:', text);
+				throw new Error(`HTTP ${response.status}`);
+			}
+			await loadProject();
+			cancelEditDirectory();
+		} catch (err) {
+			console.error('Failed to update directory:', err);
+			alert('Failed to update directory.');
 		}
 	}
 	
@@ -837,16 +892,28 @@
 										</span>
 									{/if}
 								</div>
-								<button 
-									on:click={() => deleteDirectory(directory.base_directory_id)}
-									class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors"
-									title="Delete directory"
-									aria-label="Delete directory"
-								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-									</svg>
-								</button>
+								<div class="flex items-center gap-2">
+									<button 
+										on:click={() => startEditDirectory(directory)}
+										class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-1 transition-colors"
+										title="Edit directory"
+										aria-label="Edit directory"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+										</svg>
+									</button>
+									<button 
+										on:click={() => deleteDirectory(directory.base_directory_id)}
+										class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors"
+										title="Delete directory"
+										aria-label="Delete directory"
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+										</svg>
+									</button>
+								</div>
 							</div>
 							
 							{#if directory.worktreeSetupCommands || directory.devServerSetupCommands}
@@ -857,6 +924,39 @@
 									{#if directory.devServerSetupCommands}
 										<div><strong>Dev Server:</strong> {directory.devServerSetupCommands}</div>
 									{/if}
+								</div>
+							{/if}
+
+							{#if editingDirectoryId === directory.base_directory_id}
+								<div class="mt-3 space-y-3 border-t border-gray-600 pt-3">
+									<div>
+										<label class="block text-sm text-gray-300 mb-1">Path</label>
+										<input class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" bind:value={editDirectory.path} />
+									</div>
+									<div class="flex items-center gap-2">
+										<input id={`git-${directory.base_directory_id}`} type="checkbox" bind:checked={editDirectory.gitInitialized} class="accent-blue-500" />
+										<label for={`git-${directory.base_directory_id}`} class="text-sm text-gray-300">Git initialized</label>
+									</div>
+									<div>
+										<label class="block text-sm text-gray-300 mb-1">Worktree Setup Commands</label>
+										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.worktreeSetupCommands}></textarea>
+									</div>
+									<div>
+										<label class="block text-sm text-gray-300 mb-1">Worktree Teardown Commands</label>
+										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.worktreeTeardownCommands}></textarea>
+									</div>
+									<div>
+										<label class="block text-sm text-gray-300 mb-1">Dev Server Setup Commands</label>
+										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.devServerSetupCommands}></textarea>
+									</div>
+									<div>
+										<label class="block text-sm text-gray-300 mb-1">Dev Server Teardown Commands</label>
+										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.devServerTeardownCommands}></textarea>
+									</div>
+									<div class="flex gap-2">
+										<button class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded" on:click={saveEditDirectory}>Save</button>
+										<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded" on:click={cancelEditDirectory}>Cancel</button>
+									</div>
 								</div>
 							{/if}
 						</div>

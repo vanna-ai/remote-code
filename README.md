@@ -69,6 +69,7 @@ Remote-Code is a web-based development environment that lets you **manage multip
 - **tmux session management** for persistent, isolated agent environments  
 - **Git worktree automation** for conflict-free parallel development
 - **Project lifecycle management** from setup to cleanup
+- **Editable base directories**: update path, git flag, and setup/teardown commands from the project page
 - **Real-time dashboard** showing all projects, tasks, and agent status
 - **Secure tunnel integration** for remote access (Cloudflare, ngrok)
 - **Mobile-responsive interface** with native app in development
