@@ -159,7 +159,7 @@ func getGitStatus(dir string) (*GitStatus, int, string, error) {
     return status, 0, "", nil
 }
 
-func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pathParts []string) {
+func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
     if len(pathParts) == 0 {
         json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid git endpoint"})
         return
@@ -336,6 +336,7 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pat
         var body struct{
             Path   string `json:"path"`
             Branch string `json:"branch"`
+            TaskID int64  `json:"taskId"`
         }
         if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
             w.WriteHeader(http.StatusBadRequest)
@@ -427,9 +428,23 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pat
             return
         }
 
+        // Optionally update task status to done
+        taskStatus := "skipped"
+        if body.TaskID != 0 {
+            if task, err := queries.GetTask(ctx, body.TaskID); err == nil {
+                if _, err := queries.UpdateTask(ctx, db.UpdateTaskParams{ID: task.ID, Title: task.Title, Description: task.Description, Status: "done"}); err == nil {
+                    taskStatus = "updated"
+                } else {
+                    taskStatus = "failed"
+                }
+            } else {
+                taskStatus = "failed"
+            }
+        }
         json.NewEncoder(w).Encode(map[string]interface{}{
-            "ok":     true,
-            "output": mergeOut,
+            "ok":          true,
+            "output":      mergeOut,
+            "taskStatus":  taskStatus,
         })
 
     case "push":
@@ -509,6 +524,74 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, _ context.Context, pat
             return
         }
         json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": pushOut})
+
+    case "merge-ready":
+        if r.Method != http.MethodGet {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        worktreeDir := r.URL.Query().Get("path")
+        if worktreeDir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        // Worktree must be clean
+        wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
+        if strings.TrimSpace(wtStatus) != "" {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Uncommitted changes in worktree"})
+            return
+        }
+        // Current worktree branch
+        curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot detect current branch"})
+            return
+        }
+        currentBranch := strings.TrimSpace(curBrOut)
+        if currentBranch == "" || currentBranch == "main" {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Already on main"})
+            return
+        }
+        // Resolve base repository path from any worktree dir via git-common-dir
+        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Not a git repo"})
+            return
+        }
+        gitDir := strings.TrimSpace(commonDirOut)
+        basePath := filepath.Dir(gitDir)
+        // Base must be clean
+        baseStatus, _, _ := runGit(basePath, "status", "--porcelain")
+        if strings.TrimSpace(baseStatus) != "" {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Base repo has uncommitted changes"})
+            return
+        }
+        // SHAs for main and worktree HEAD
+        headSHA, _, err := runGit(worktreeDir, "rev-parse", "HEAD")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve worktree HEAD"})
+            return
+        }
+        branchSHA := strings.TrimSpace(headSHA)
+        mainOut, _, err := runGit(basePath, "rev-parse", "main")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve main"})
+            return
+        }
+        mainSHA := strings.TrimSpace(mainOut)
+        if branchSHA == mainSHA {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "No changes to merge"})
+            return
+        }
+        // Check fast-forward possibility: is main an ancestor of branch?
+        _, code, _ := runGit(basePath, "merge-base", "--is-ancestor", mainSHA, branchSHA)
+        if code != 0 {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Non fast-forward; rebase required"})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ready": true, "branch": currentBranch, "main": mainSHA, "head": branchSHA})
 
     case "branches":
         if r.Method != http.MethodGet {

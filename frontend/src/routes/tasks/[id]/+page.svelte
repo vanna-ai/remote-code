@@ -30,13 +30,22 @@
 	let isSendingInput = false;
 	let isResendingTask = false;
 	let isDeleting = false;
+    let gitStatusPoll = null;
 
 	$: executionId = $page.params.id;
 
 	onMount(() => {
 		loadTaskExecutionDetails();
+		// Poll git status every second
+		gitStatusPoll = setInterval(() => {
+			loadGitStatus();
+		}, 1000);
 		
 		return () => {
+			if (gitStatusPoll) {
+				clearInterval(gitStatusPoll);
+				gitStatusPoll = null;
+			}
 			if (ws) {
 				ws.close();
 			}
@@ -100,10 +109,8 @@
 					}
 				}
 				
-            // Load git status and branches, then base branch for default selection
+            // Load git status (used for merge and push controls)
             await loadGitStatus();
-            await loadBranches();
-            await loadBaseBranchDefault();
 				
 				// Initialize terminal once we have execution info
 				initializeTerminal();
@@ -131,6 +138,21 @@
                 gitStatus = await res.json();
             } else {
                 gitStatus = null;
+            }
+            // Also compute merge readiness
+            try {
+                const mr = await fetch(`/api/git/merge-ready?path=${encodeURIComponent(execution.worktree_path)}`);
+                if (mr.ok) {
+                    const data = await mr.json();
+                    mergeReady = !!data.ready;
+                    mergeReadyReason = data.ready ? '' : (data.reason || 'Not ready');
+                } else {
+                    mergeReady = false;
+                    mergeReadyReason = 'Merge readiness check failed';
+                }
+            } catch (e) {
+                mergeReady = false;
+                mergeReadyReason = 'Merge readiness check failed';
             }
         } catch (err) {
             console.error('Failed to load git status:', err);
@@ -191,19 +213,18 @@
         }
     }
 
-	let mergeBranchName = '';
 	let merging = false;
     let pushing = false;
-    let branches = [];
-    let loadingBranches = false;
+    let mergeReady = false;
+    let mergeReadyReason = '';
     async function mergeBranch() {
-        if (!execution?.worktree_path || !mergeBranchName.trim()) return;
+        if (!execution?.worktree_path || !gitStatus?.currentBranch) return;
         merging = true;
         try {
             const res = await fetch(`/api/git/merge`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: execution.worktree_path, branch: mergeBranchName })
+                body: JSON.stringify({ path: execution.worktree_path, branch: gitStatus.currentBranch, taskId: execution.task_id })
             });
             let data = null;
             try {
@@ -217,7 +238,6 @@
                 alert(`Merge failed${step}: ${details}`);
                 return;
             }
-            mergeBranchName = '';
             await loadGitStatus();
         } finally {
             merging = false;
@@ -247,53 +267,7 @@
         }
     }
 
-    async function loadBaseBranchDefault() {
-        try {
-            if (!execution?.worktree_path) return;
-            if (mergeBranchName && mergeBranchName.trim().length > 0) return; // do not override user input
-            // Prefer current worktree branch as the source to merge into base main
-            if (gitStatus?.currentBranch) {
-                mergeBranchName = gitStatus.currentBranch;
-                return;
-            }
-            // Fallback to base repo's main branch if we couldn't detect current
-            const res = await fetch(`/api/git/base-branch?path=${encodeURIComponent(execution.worktree_path)}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data?.branch) {
-                    mergeBranchName = data.branch;
-                }
-            }
-        } catch (e) {
-            // ignore and keep empty
-            console.warn('Failed to load base branch', e);
-        }
-    }
-
-    async function loadBranches() {
-        if (!execution?.worktree_path) return;
-        loadingBranches = true;
-        try {
-            const res = await fetch(`/api/git/branches?path=${encodeURIComponent(execution.worktree_path)}&includeRemotes=true`);
-            if (res.ok) {
-                const data = await res.json();
-                branches = Array.isArray(data?.branches) ? data.branches : [];
-                // If no selection yet, prefer base branch, else first branch
-                if (!mergeBranchName) {
-                    if (branches.includes(mergeBranchName)) {
-                        // keep
-                    } else if (branches.length > 0) {
-                        // Temporarily defer to base-branch when it loads
-                        mergeBranchName = branches[0];
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to load branches', e);
-        } finally {
-            loadingBranches = false;
-        }
-    }
+    // No branch dropdown; merges current worktree branch into base main
 
 	function initializeTerminal() {
 		// Load xterm if not already loaded
@@ -939,28 +913,15 @@
                     <button class="px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-sm disabled:bg-gray-600" disabled={committing || !commitMsg.trim()} on:click={commitChanges}>Commit</button>
                 </div>
                 <div class="flex gap-2 items-center">
-                    {#if loadingBranches}
-                        <div class="text-xs text-gray-400">Loading branches…</div>
-                    {:else}
-                        <select class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                                bind:value={mergeBranchName}>
-                            {#each branches as b}
-                                <option value={b}>{b}</option>
-                            {/each}
-                            {#if mergeBranchName && !branches.includes(mergeBranchName)}
-                                <option value={mergeBranchName}>{mergeBranchName}</option>
-                            {/if}
-                        </select>
-                        <button class="px-2 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-                                aria-label="Refresh branches"
-                                title="Refresh branches"
-                                on:click={loadBranches}>
-                            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M5 19A9 9 0 0119 5l1 1"/>
-                            </svg>
-                        </button>
+                    <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
+                            disabled={merging || !mergeReady}
+                            title={mergeReady ? 'Merge the worktree branch into main' : (mergeReadyReason || 'Not ready to merge')}
+                            on:click={mergeBranch}>
+                        {merging ? 'Merging…' : 'Merge into main'}
+                    </button>
+                    {#if !mergeReady && mergeReadyReason}
+                        <span class="text-xs text-gray-400">{mergeReadyReason}</span>
                     {/if}
-                    <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm disabled:bg-gray-600" disabled={merging || !mergeBranchName.trim()} on:click={mergeBranch}>Merge</button>
                 </div>
             </div>
         </div>
