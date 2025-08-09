@@ -782,28 +782,33 @@
 					</div>
 				</div>
 
+				<!-- Re-send Task Button (always show if running) -->
+				{#if execution.status === 'running'}
+					<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+							<h3 class="text-lg font-semibold text-white">Task Controls</h3>
+							<button 
+								on:click={resendTaskToSession}
+								disabled={isResendingTask}
+								class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+							>
+								{#if isResendingTask}
+									<div class="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+								{:else}
+									<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+									</svg>
+								{/if}
+								{isResendingTask ? 'Sending...' : 'Re-Send Task'}
+							</button>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Task Description -->
 				{#if execution.task_description}
 					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-							<h3 class="text-lg font-semibold text-white">Task Description</h3>
-							{#if execution.status === 'running'}
-								<button 
-									on:click={resendTaskToSession}
-									disabled={isResendingTask}
-									class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
-								>
-									{#if isResendingTask}
-										<div class="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-									{:else}
-										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-										</svg>
-									{/if}
-									{isResendingTask ? 'Sending...' : 'Re-Send Task'}
-								</button>
-							{/if}
-						</div>
+						<h3 class="text-lg font-semibold text-white mb-3">Task Description</h3>
 						<p class="text-gray-300">{execution.task_description}</p>
 					</div>
 				{/if}
