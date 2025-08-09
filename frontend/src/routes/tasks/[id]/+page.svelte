@@ -251,6 +251,12 @@
         try {
             if (!execution?.worktree_path) return;
             if (mergeBranchName && mergeBranchName.trim().length > 0) return; // do not override user input
+            // Prefer current worktree branch as the source to merge into base main
+            if (gitStatus?.currentBranch) {
+                mergeBranchName = gitStatus.currentBranch;
+                return;
+            }
+            // Fallback to base repo's main branch if we couldn't detect current
             const res = await fetch(`/api/git/base-branch?path=${encodeURIComponent(execution.worktree_path)}`);
             if (res.ok) {
                 const data = await res.json();
