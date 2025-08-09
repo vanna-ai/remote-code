@@ -217,6 +217,7 @@
     let pushing = false;
     let mergeReady = false;
     let mergeReadyReason = '';
+    let updatingFromMain = false;
     async function mergeBranch() {
         if (!execution?.worktree_path || !gitStatus?.currentBranch) return;
         merging = true;
@@ -264,6 +265,29 @@
             await loadGitStatus();
         } finally {
             pushing = false;
+        }
+    }
+
+    async function updateFromMain(strategy = 'merge') {
+        if (!execution?.worktree_path) return;
+        updatingFromMain = true;
+        try {
+            const res = await fetch(`/api/git/update-from-main`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: execution.worktree_path, strategy })
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) {}
+            if (!res.ok || (data && data.ok === false)) {
+                const details = data?.error || data?.output || 'Unknown error';
+                const step = data?.step ? ` (step: ${data.step})` : '';
+                alert(`Update from main failed${step}: ${details}`);
+                return;
+            }
+            await loadGitStatus();
+        } finally {
+            updatingFromMain = false;
         }
     }
 
@@ -921,6 +945,13 @@
                     </button>
                     {#if !mergeReady && mergeReadyReason}
                         <span class="text-xs text-gray-400">{mergeReadyReason}</span>
+                        {#if mergeReadyReason.includes('Non fast-forward')}
+                            <button class="ml-2 text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700 disabled:opacity-60"
+                                    disabled={updatingFromMain}
+                                    on:click={() => updateFromMain('merge')}>
+                                {updatingFromMain ? 'Updating…' : 'Update from main'}
+                            </button>
+                        {/if}
                     {/if}
                 </div>
             </div>

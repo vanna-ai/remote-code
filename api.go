@@ -593,6 +593,67 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
         }
         json.NewEncoder(w).Encode(map[string]interface{}{"ready": true, "branch": currentBranch, "main": mainSHA, "head": branchSHA})
 
+    case "update-from-main":
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+            return
+        }
+        var body struct{
+            Path     string `json:"path"`
+            Strategy string `json:"strategy"` // "merge" (default) or "rebase"
+        }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+            return
+        }
+        worktreeDir := body.Path
+        if worktreeDir == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+            return
+        }
+        // Must be a git repo and clean
+        wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
+        if strings.TrimSpace(wtStatus) != "" {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_clean", "error": "Uncommitted changes in worktree"})
+            return
+        }
+        // Determine current branch and ensure not main
+        curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Cannot detect current branch"})
+            return
+        }
+        currentBranch := strings.TrimSpace(curBrOut)
+        if currentBranch == "" || currentBranch == "main" {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Already on main"})
+            return
+        }
+        // Fetch latest
+        if out, code, err := runGit(worktreeDir, "fetch", "origin"); err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "fetch", "code": code, "error": "git fetch failed", "output": out})
+            return
+        }
+        strategy := strings.ToLower(strings.TrimSpace(body.Strategy))
+        if strategy == "rebase" {
+            out, code, err := runGit(worktreeDir, "rebase", "origin/main")
+            if err != nil {
+                json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "rebase", "code": code, "error": "git rebase failed", "output": out})
+                return
+            }
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+            return
+        }
+        // Default: merge origin/main into current branch (like GitHub Update branch)
+        out, code, err := runGit(worktreeDir, "merge", "origin/main")
+        if err != nil {
+            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "merge", "code": code, "error": "git merge failed", "output": out})
+            return
+        }
+        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+
     case "branches":
         if r.Method != http.MethodGet {
             w.WriteHeader(http.StatusMethodNotAllowed)
