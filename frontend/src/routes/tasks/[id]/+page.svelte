@@ -990,7 +990,7 @@
 							<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
 							<div class="w-3 h-3 rounded-full bg-green-500"></div>
 						</div>
-						<span class="text-gray-400 text-sm font-mono">task_{execution.task_id}_agent_{execution.agent_id}</span>
+						<span class="text-gray-400 text-sm font-mono">tmux attach -t task_{execution.task_id}_agent_{execution.agent_id}</span>
 					</div>
 					<div class="flex items-center gap-2 text-xs text-gray-500">
 						<div class="w-2 h-2 rounded-full bg-green-500"></div>
@@ -1059,7 +1059,7 @@
 								<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
 								<div class="w-3 h-3 rounded-full bg-green-500"></div>
 							</div>
-							<span class="text-green-400 text-sm font-mono">dev_{execution.worktree_id}</span>
+							<span class="text-green-400 text-sm font-mono">tmux attach -t dev_{execution.worktree_id}</span>
 							<span class="px-2 py-1 rounded text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500">DEV SERVER</span>
 						</div>
 						<div class="flex items-center gap-2 text-xs text-green-500">
