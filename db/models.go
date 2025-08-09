@@ -9,13 +9,51 @@ import (
 )
 
 type Agent struct {
-	ID        int64        `db:"id" json:"id"`
-	RootID    int64        `db:"root_id" json:"root_id"`
-	Name      string       `db:"name" json:"name"`
-	Command   string       `db:"command" json:"command"`
-	Params    string       `db:"params" json:"params"`
-	CreatedAt sql.NullTime `db:"created_at" json:"created_at"`
-	UpdatedAt sql.NullTime `db:"updated_at" json:"updated_at"`
+	ID             int64           `db:"id" json:"id"`
+	RootID         int64           `db:"root_id" json:"root_id"`
+	Name           string          `db:"name" json:"name"`
+	Command        string          `db:"command" json:"command"`
+	Params         string          `db:"params" json:"params"`
+	CreatedAt      sql.NullTime    `db:"created_at" json:"created_at"`
+	UpdatedAt      sql.NullTime    `db:"updated_at" json:"updated_at"`
+	EloRating      sql.NullFloat64 `db:"elo_rating" json:"elo_rating"`
+	GamesPlayed    sql.NullInt64   `db:"games_played" json:"games_played"`
+	Wins           sql.NullInt64   `db:"wins" json:"wins"`
+	Losses         sql.NullInt64   `db:"losses" json:"losses"`
+	Draws          sql.NullInt64   `db:"draws" json:"draws"`
+	LastCompetedAt sql.NullTime    `db:"last_competed_at" json:"last_competed_at"`
+}
+
+type AgentCompetition struct {
+	ID                int64           `db:"id" json:"id"`
+	TaskID            int64           `db:"task_id" json:"task_id"`
+	Agent1ID          int64           `db:"agent1_id" json:"agent1_id"`
+	Agent2ID          int64           `db:"agent2_id" json:"agent2_id"`
+	Agent1ExecutionID int64           `db:"agent1_execution_id" json:"agent1_execution_id"`
+	Agent2ExecutionID int64           `db:"agent2_execution_id" json:"agent2_execution_id"`
+	WinnerAgentID     sql.NullInt64   `db:"winner_agent_id" json:"winner_agent_id"`
+	Agent1EloBefore   float64         `db:"agent1_elo_before" json:"agent1_elo_before"`
+	Agent2EloBefore   float64         `db:"agent2_elo_before" json:"agent2_elo_before"`
+	Agent1EloAfter    float64         `db:"agent1_elo_after" json:"agent1_elo_after"`
+	Agent2EloAfter    float64         `db:"agent2_elo_after" json:"agent2_elo_after"`
+	KFactor           sql.NullFloat64 `db:"k_factor" json:"k_factor"`
+	CompetitionType   sql.NullString  `db:"competition_type" json:"competition_type"`
+	Notes             sql.NullString  `db:"notes" json:"notes"`
+	CreatedAt         sql.NullTime    `db:"created_at" json:"created_at"`
+	UpdatedAt         sql.NullTime    `db:"updated_at" json:"updated_at"`
+}
+
+type AgentLeaderboard struct {
+	ID             int64           `db:"id" json:"id"`
+	Name           string          `db:"name" json:"name"`
+	EloRating      sql.NullFloat64 `db:"elo_rating" json:"elo_rating"`
+	GamesPlayed    sql.NullInt64   `db:"games_played" json:"games_played"`
+	Wins           sql.NullInt64   `db:"wins" json:"wins"`
+	Losses         sql.NullInt64   `db:"losses" json:"losses"`
+	Draws          sql.NullInt64   `db:"draws" json:"draws"`
+	LastCompetedAt sql.NullTime    `db:"last_competed_at" json:"last_competed_at"`
+	WinPercentage  int64           `db:"win_percentage" json:"win_percentage"`
+	EloRank        interface{}     `db:"elo_rank" json:"elo_rank"`
 }
 
 type BaseDirectory struct {
@@ -30,6 +68,27 @@ type BaseDirectory struct {
 	DevServerTeardownCommands string       `db:"dev_server_teardown_commands" json:"dev_server_teardown_commands"`
 	CreatedAt                 sql.NullTime `db:"created_at" json:"created_at"`
 	UpdatedAt                 sql.NullTime `db:"updated_at" json:"updated_at"`
+}
+
+type CompetitionHistory struct {
+	ID              int64           `db:"id" json:"id"`
+	TaskID          int64           `db:"task_id" json:"task_id"`
+	Agent1ID        int64           `db:"agent1_id" json:"agent1_id"`
+	Agent1Name      string          `db:"agent1_name" json:"agent1_name"`
+	Agent2ID        int64           `db:"agent2_id" json:"agent2_id"`
+	Agent2Name      string          `db:"agent2_name" json:"agent2_name"`
+	WinnerAgentID   sql.NullInt64   `db:"winner_agent_id" json:"winner_agent_id"`
+	WinnerName      interface{}     `db:"winner_name" json:"winner_name"`
+	Agent1EloBefore float64         `db:"agent1_elo_before" json:"agent1_elo_before"`
+	Agent2EloBefore float64         `db:"agent2_elo_before" json:"agent2_elo_before"`
+	Agent1EloAfter  float64         `db:"agent1_elo_after" json:"agent1_elo_after"`
+	Agent2EloAfter  float64         `db:"agent2_elo_after" json:"agent2_elo_after"`
+	Agent1EloChange interface{}     `db:"agent1_elo_change" json:"agent1_elo_change"`
+	Agent2EloChange interface{}     `db:"agent2_elo_change" json:"agent2_elo_change"`
+	KFactor         sql.NullFloat64 `db:"k_factor" json:"k_factor"`
+	CompetitionType sql.NullString  `db:"competition_type" json:"competition_type"`
+	Notes           sql.NullString  `db:"notes" json:"notes"`
+	CreatedAt       sql.NullTime    `db:"created_at" json:"created_at"`
 }
 
 type Project struct {

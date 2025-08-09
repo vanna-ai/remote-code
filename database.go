@@ -55,12 +55,22 @@ func initDatabaseWithPathAndReturn(dbPath string) (*sql.DB, *db.Queries, string)
 }
 
 func applyMigrations(database *sql.DB) error {
-	// Read and execute the migration file
-	migrationSQL, err := os.ReadFile("db/migrations/001_initial.sql")
-	if err != nil {
-		return err
+	migrations := []string{
+		"db/migrations/001_initial.sql",
+		"db/migrations/002_elo_tracking.sql",
 	}
 
-	_, err = database.Exec(string(migrationSQL))
-	return err
+	for _, migrationPath := range migrations {
+		migrationSQL, err := os.ReadFile(migrationPath)
+		if err != nil {
+			return fmt.Errorf("failed to read migration %s: %v", migrationPath, err)
+		}
+
+		_, err = database.Exec(string(migrationSQL))
+		if err != nil {
+			return fmt.Errorf("failed to execute migration %s: %v", migrationPath, err)
+		}
+	}
+
+	return nil
 }

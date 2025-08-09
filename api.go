@@ -428,6 +428,27 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
             return
         }
 
+        // Record ELO competition for the merged execution (winner) vs all other executions
+        eloStatus := "skipped"
+        if body.TaskID != 0 {
+            // Find the execution being merged by worktree path
+            if mergedExecution, err := queries.GetTaskExecutionByWorktreePath(ctx, worktreeDir); err == nil {
+                // Process ELO competitions with the merged execution as winner
+                eloCalc := NewELOCalculator(queries)
+                if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, mergedExecution.AgentID); err == nil {
+                    if result.TotalCompetitions > 0 {
+                        eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
+                    } else {
+                        eloStatus = "no competitions created"
+                    }
+                } else {
+                    eloStatus = fmt.Sprintf("elo error: %v", err)
+                }
+            } else {
+                eloStatus = fmt.Sprintf("execution not found: %v", err)
+            }
+        }
+
         // Optionally update task status to done
         taskStatus := "skipped"
         if body.TaskID != 0 {
@@ -445,6 +466,7 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
             "ok":          true,
             "output":      mergeOut,
             "taskStatus":  taskStatus,
+            "eloStatus":   eloStatus,
         })
 
     case "push":
@@ -827,6 +849,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
 	case "git":
 		handleGitAPI(w, r, ctx, pathParts[1:])
+	case "competitions":
+		handleCompetitionsAPI(w, r, ctx, pathParts[1:])
+	case "elo":
+		handleELOAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -1908,8 +1934,13 @@ func updateTaskExecutionStatus(ctx context.Context, executionID int64, status st
 	})
 	if err != nil {
 		log.Printf("Failed to update task execution status: %v", err)
+		return
 	}
+
+	// ELO competitions are now recorded when user merges, not on task completion
 }
+
+// processTaskCompetitionsAsync function removed - ELO competitions now recorded on merge, not task completion
 
 func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	if r.Method != "POST" {
@@ -2753,4 +2784,190 @@ func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) er
 	}
 	
 	return nil
+}
+
+func handleCompetitionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	switch r.Method {
+	case "GET":
+		if len(pathParts) == 0 {
+			competitions, err := queries.ListCompetitions(ctx)
+			if err != nil {
+				http.Error(w, "Failed to list competitions", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(competitions)
+		} else if pathParts[0] == "history" {
+			history, err := queries.GetCompetitionHistory(ctx)
+			if err != nil {
+				http.Error(w, "Failed to get competition history", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(history)
+		} else if pathParts[0] == "task" && len(pathParts) > 1 {
+			taskID, err := strconv.ParseInt(pathParts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid task ID", http.StatusBadRequest)
+				return
+			}
+			competitions, err := queries.ListCompetitionsByTask(ctx, taskID)
+			if err != nil {
+				http.Error(w, "Failed to get competitions for task", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(competitions)
+		} else if pathParts[0] == "agent" && len(pathParts) > 1 {
+			agentID, err := strconv.ParseInt(pathParts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid agent ID", http.StatusBadRequest)
+				return
+			}
+			competitions, err := queries.ListCompetitionsByAgent(ctx, db.ListCompetitionsByAgentParams{
+				Agent1ID: agentID,
+				Agent2ID: agentID,
+			})
+			if err != nil {
+				http.Error(w, "Failed to get competitions for agent", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(competitions)
+		} else {
+			competitionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid competition ID", http.StatusBadRequest)
+				return
+			}
+			competition, err := queries.GetCompetition(ctx, competitionID)
+			if err != nil {
+				http.Error(w, "Competition not found", http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(competition)
+		}
+
+	case "POST":
+		if len(pathParts) > 0 && pathParts[0] == "process-task" && len(pathParts) > 1 {
+			taskID, err := strconv.ParseInt(pathParts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid task ID", http.StatusBadRequest)
+				return
+			}
+
+			eloCalc := NewELOCalculator(queries)
+			result, err := eloCalc.ProcessTaskCompetitions(ctx, taskID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to process competitions: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			json.NewEncoder(w).Encode(result)
+		} else {
+			var createReq struct {
+				TaskID            int64  `json:"task_id"`
+				Agent1ID          int64  `json:"agent1_id"`
+				Agent2ID          int64  `json:"agent2_id"`
+				Agent1ExecutionID int64  `json:"agent1_execution_id"`
+				Agent2ExecutionID int64  `json:"agent2_execution_id"`
+				Result            string `json:"result"` // "agent1_wins", "agent2_wins", "draw"
+				Notes             string `json:"notes"`
+			}
+
+			if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
+				http.Error(w, "Invalid JSON", http.StatusBadRequest)
+				return
+			}
+
+			var result MatchResult
+			switch createReq.Result {
+			case "agent1_wins":
+				result = Agent1Wins
+			case "agent2_wins":
+				result = Agent2Wins
+			case "draw":
+				result = Draw
+			default:
+				http.Error(w, "Invalid result value", http.StatusBadRequest)
+				return
+			}
+
+			eloCalc := NewELOCalculator(queries)
+			competition, err := eloCalc.RecordCompetition(ctx, CompetitionParams{
+				TaskID:            createReq.TaskID,
+				Agent1ID:          createReq.Agent1ID,
+				Agent2ID:          createReq.Agent2ID,
+				Agent1ExecutionID: createReq.Agent1ExecutionID,
+				Agent2ExecutionID: createReq.Agent2ExecutionID,
+				Result:            result,
+				Notes:             createReq.Notes,
+			})
+
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to create competition: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			json.NewEncoder(w).Encode(competition)
+		}
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleELOAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	switch r.Method {
+	case "GET":
+		if len(pathParts) == 0 || pathParts[0] == "leaderboard" {
+			leaderboard, err := queries.GetAgentLeaderboard(ctx)
+			if err != nil {
+				http.Error(w, "Failed to get leaderboard", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(leaderboard)
+		} else if pathParts[0] == "agent" && len(pathParts) > 2 && pathParts[2] == "history" {
+			agentID, err := strconv.ParseInt(pathParts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid agent ID", http.StatusBadRequest)
+				return
+			}
+			history, err := queries.GetAgentELOHistory(ctx, db.GetAgentELOHistoryParams{
+				Agent1ID: agentID,
+				Agent2ID: agentID,
+			})
+			if err != nil {
+				http.Error(w, "Failed to get ELO history", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(history)
+		} else if pathParts[0] == "head-to-head" && len(pathParts) > 2 {
+			agent1ID, err := strconv.ParseInt(pathParts[1], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid agent1 ID", http.StatusBadRequest)
+				return
+			}
+			agent2ID, err := strconv.ParseInt(pathParts[2], 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid agent2 ID", http.StatusBadRequest)
+				return
+			}
+			
+			record, err := queries.GetHeadToHeadRecord(ctx, db.GetHeadToHeadRecordParams{
+				WinnerAgentID:   sql.NullInt64{Valid: true, Int64: agent1ID},
+				WinnerAgentID_2: sql.NullInt64{Valid: true, Int64: agent2ID},
+				Agent1ID:        agent1ID,
+				Agent2ID:        agent2ID,
+				Agent1ID_2:      agent2ID,
+				Agent2ID_2:      agent1ID,
+			})
+			if err != nil {
+				http.Error(w, "Failed to get head-to-head record", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(record)
+		} else {
+			http.Error(w, "Unknown ELO endpoint", http.StatusNotFound)
+		}
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

@@ -64,3 +64,20 @@ ORDER BY te.created_at DESC;
 
 -- name: DeleteTaskExecution :exec
 DELETE FROM task_executions WHERE id = ?;
+
+-- name: ListTaskExecutionsByTaskID :many
+SELECT * FROM task_executions
+WHERE task_id = ?
+ORDER BY created_at;
+
+-- name: GetTaskExecutionByWorktreePath :one
+SELECT 
+    te.*,
+    t.title as task_title,
+    a.name as agent_name,
+    w.path as worktree_path
+FROM task_executions te
+JOIN tasks t ON te.task_id = t.id
+JOIN agents a ON te.agent_id = a.id
+JOIN worktrees w ON te.worktree_id = w.id
+WHERE w.path = ?;

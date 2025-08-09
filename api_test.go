@@ -39,6 +39,12 @@ func TestMain(m *testing.M) {
 func setupTestDB(t *testing.T) {
 	// Clean existing data for isolated tests
 	ctx := context.Background()
+	
+	// Clean ELO tables first (due to foreign key constraints)
+	database.ExecContext(ctx, "DELETE FROM agent_competitions")
+	
+	// Clean other tables
+	database.ExecContext(ctx, "DELETE FROM task_executions")
 	database.ExecContext(ctx, "DELETE FROM tasks")
 	database.ExecContext(ctx, "DELETE FROM worktrees")
 	database.ExecContext(ctx, "DELETE FROM base_directories")

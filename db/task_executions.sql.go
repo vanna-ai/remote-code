@@ -72,6 +72,50 @@ func (q *Queries) GetTaskExecution(ctx context.Context, id int64) (TaskExecution
 	return i, err
 }
 
+const getTaskExecutionByWorktreePath = `-- name: GetTaskExecutionByWorktreePath :one
+SELECT 
+    te.id, te.task_id, te.agent_id, te.worktree_id, te.status, te.created_at, te.updated_at,
+    t.title as task_title,
+    a.name as agent_name,
+    w.path as worktree_path
+FROM task_executions te
+JOIN tasks t ON te.task_id = t.id
+JOIN agents a ON te.agent_id = a.id
+JOIN worktrees w ON te.worktree_id = w.id
+WHERE w.path = ?
+`
+
+type GetTaskExecutionByWorktreePathRow struct {
+	ID           int64        `db:"id" json:"id"`
+	TaskID       int64        `db:"task_id" json:"task_id"`
+	AgentID      int64        `db:"agent_id" json:"agent_id"`
+	WorktreeID   int64        `db:"worktree_id" json:"worktree_id"`
+	Status       string       `db:"status" json:"status"`
+	CreatedAt    sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt    sql.NullTime `db:"updated_at" json:"updated_at"`
+	TaskTitle    string       `db:"task_title" json:"task_title"`
+	AgentName    string       `db:"agent_name" json:"agent_name"`
+	WorktreePath string       `db:"worktree_path" json:"worktree_path"`
+}
+
+func (q *Queries) GetTaskExecutionByWorktreePath(ctx context.Context, path string) (GetTaskExecutionByWorktreePathRow, error) {
+	row := q.db.QueryRowContext(ctx, getTaskExecutionByWorktreePath, path)
+	var i GetTaskExecutionByWorktreePathRow
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.AgentID,
+		&i.WorktreeID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TaskTitle,
+		&i.AgentName,
+		&i.WorktreePath,
+	)
+	return i, err
+}
+
 const getTaskExecutionWithDetails = `-- name: GetTaskExecutionWithDetails :one
 SELECT 
     te.id, te.task_id, te.agent_id, te.worktree_id, te.status, te.created_at, te.updated_at,
@@ -275,6 +319,43 @@ func (q *Queries) ListTaskExecutions(ctx context.Context) ([]ListTaskExecutionsR
 			&i.TaskTitle,
 			&i.AgentName,
 			&i.AgentTmuxID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskExecutionsByTaskID = `-- name: ListTaskExecutionsByTaskID :many
+SELECT id, task_id, agent_id, worktree_id, status, created_at, updated_at FROM task_executions
+WHERE task_id = ?
+ORDER BY created_at
+`
+
+func (q *Queries) ListTaskExecutionsByTaskID(ctx context.Context, taskID int64) ([]TaskExecution, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskExecutionsByTaskID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskExecution
+	for rows.Next() {
+		var i TaskExecution
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.AgentID,
+			&i.WorktreeID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
