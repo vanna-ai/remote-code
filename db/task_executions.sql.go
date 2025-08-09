@@ -80,11 +80,14 @@ SELECT
     a.name as agent_name,
     a.command as agent_command,
     w.path as worktree_path,
-    w.base_directory_id
+    w.base_directory_id,
+    p.id as project_id,
+    p.name as project_name
 FROM task_executions te
 JOIN tasks t ON te.task_id = t.id
 JOIN agents a ON te.agent_id = a.id
 JOIN worktrees w ON te.worktree_id = w.id
+JOIN projects p ON t.project_id = p.id
 WHERE te.id = ?
 `
 
@@ -102,6 +105,8 @@ type GetTaskExecutionWithDetailsRow struct {
 	AgentCommand    string       `db:"agent_command" json:"agent_command"`
 	WorktreePath    string       `db:"worktree_path" json:"worktree_path"`
 	BaseDirectoryID string       `db:"base_directory_id" json:"base_directory_id"`
+	ProjectID       int64        `db:"project_id" json:"project_id"`
+	ProjectName     string       `db:"project_name" json:"project_name"`
 }
 
 func (q *Queries) GetTaskExecutionWithDetails(ctx context.Context, id int64) (GetTaskExecutionWithDetailsRow, error) {
@@ -121,6 +126,8 @@ func (q *Queries) GetTaskExecutionWithDetails(ctx context.Context, id int64) (Ge
 		&i.AgentCommand,
 		&i.WorktreePath,
 		&i.BaseDirectoryID,
+		&i.ProjectID,
+		&i.ProjectName,
 	)
 	return i, err
 }

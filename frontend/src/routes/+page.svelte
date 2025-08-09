@@ -1,11 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
-	
 	// Home page with card-based navigation
-	const breadcrumbSegments = [
-		{ label: "Dashboard", href: "/" }
-	];
 	
 	let stats = {
 		active_sessions: 0,
@@ -39,9 +34,6 @@
 
 <div class="min-h-screen bg-gray-900 text-white">
 	<div class="container mx-auto p-6">
-		<!-- Breadcrumb -->
-		<Breadcrumb segments={breadcrumbSegments} />
-		
 		<!-- Header -->
 		<div class="mb-8">
 			<div class="flex items-center gap-4 mb-6">

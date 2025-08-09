@@ -4,7 +4,7 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	$: breadcrumbSegments = [
-		{ label: "Dashboard", href: "/" },
+		{ label: "Remote-Code", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
 		{ label: project?.name || "Loading...", href: `/projects/${$page.params.id}` }
 	];

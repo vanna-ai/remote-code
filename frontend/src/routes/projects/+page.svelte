@@ -3,7 +3,7 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	const breadcrumbSegments = [
-		{ label: "Dashboard", href: "/" },
+		{ label: "Remote-Code", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" }
 	];
 	

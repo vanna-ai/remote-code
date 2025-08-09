@@ -4,7 +4,7 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	const breadcrumbSegments = [
-		{ label: "Dashboard", href: "/" },
+		{ label: "Remote-Code", href: "/", icon: "banner" },
 		{ label: "Terminal", href: "/terminal" }
 	];
 
@@ -235,16 +235,9 @@
 		<!-- Header -->
 		<div class="mb-6">
 			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-4">
-					<img 
-						src="https://remote-code.com/static/images/banner.svg" 
-						alt="Remote-Code Logo" 
-						class="h-12 w-auto"
-					/>
-					<div>
-						<h1 class="text-3xl font-bold text-green-400 mb-1">Terminal Sessions</h1>
-						<p class="text-gray-300">Manage tmux sessions and terminal access</p>
-					</div>
+				<div>
+					<h1 class="text-3xl font-bold text-green-400 mb-1">Terminal Sessions</h1>
+					<p class="text-gray-300">Manage tmux sessions and terminal access</p>
 				</div>
 				<button 
 					on:click={showGlobal}

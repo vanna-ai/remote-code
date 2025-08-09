@@ -29,11 +29,14 @@ SELECT
     a.name as agent_name,
     a.command as agent_command,
     w.path as worktree_path,
-    w.base_directory_id
+    w.base_directory_id,
+    p.id as project_id,
+    p.name as project_name
 FROM task_executions te
 JOIN tasks t ON te.task_id = t.id
 JOIN agents a ON te.agent_id = a.id
 JOIN worktrees w ON te.worktree_id = w.id
+JOIN projects p ON t.project_id = p.id
 WHERE te.id = ?;
 
 -- name: UpdateTaskExecutionStatus :one

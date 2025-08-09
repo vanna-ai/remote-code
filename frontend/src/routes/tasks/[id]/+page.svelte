@@ -5,9 +5,11 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	$: breadcrumbSegments = [
-		{ label: "Dashboard", href: "/" },
-		{ label: "Task Executions", href: "/tasks" },
-		{ label: execution?.task_title || `Execution ${$page.params.id}`, href: `/tasks/${$page.params.id}` }
+		{ label: "Remote-Code", href: "/", icon: "banner" },
+		{ label: "Projects", href: "/projects" },
+		{ label: execution?.project_name || "Project", href: execution?.project_id ? `/projects/${execution.project_id}` : "/projects" },
+		{ label: execution?.task_title ? (execution.task_title.length > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/tasks?task_id=${execution.task_id}` : "#" },
+		{ label: execution?.agent_name || `Agent`, href: `/tasks/${$page.params.id}` }
 	];
 
 	let terminalElement;
