@@ -81,6 +81,7 @@ SELECT
     a.command as agent_command,
     w.path as worktree_path,
     w.base_directory_id,
+    w.agent_tmux_id,
     p.id as project_id,
     p.name as project_name
 FROM task_executions te
@@ -92,21 +93,22 @@ WHERE te.id = ?
 `
 
 type GetTaskExecutionWithDetailsRow struct {
-	ID              int64        `db:"id" json:"id"`
-	TaskID          int64        `db:"task_id" json:"task_id"`
-	AgentID         int64        `db:"agent_id" json:"agent_id"`
-	WorktreeID      int64        `db:"worktree_id" json:"worktree_id"`
-	Status          string       `db:"status" json:"status"`
-	CreatedAt       sql.NullTime `db:"created_at" json:"created_at"`
-	UpdatedAt       sql.NullTime `db:"updated_at" json:"updated_at"`
-	TaskTitle       string       `db:"task_title" json:"task_title"`
-	TaskDescription string       `db:"task_description" json:"task_description"`
-	AgentName       string       `db:"agent_name" json:"agent_name"`
-	AgentCommand    string       `db:"agent_command" json:"agent_command"`
-	WorktreePath    string       `db:"worktree_path" json:"worktree_path"`
-	BaseDirectoryID string       `db:"base_directory_id" json:"base_directory_id"`
-	ProjectID       int64        `db:"project_id" json:"project_id"`
-	ProjectName     string       `db:"project_name" json:"project_name"`
+	ID              int64          `db:"id" json:"id"`
+	TaskID          int64          `db:"task_id" json:"task_id"`
+	AgentID         int64          `db:"agent_id" json:"agent_id"`
+	WorktreeID      int64          `db:"worktree_id" json:"worktree_id"`
+	Status          string         `db:"status" json:"status"`
+	CreatedAt       sql.NullTime   `db:"created_at" json:"created_at"`
+	UpdatedAt       sql.NullTime   `db:"updated_at" json:"updated_at"`
+	TaskTitle       string         `db:"task_title" json:"task_title"`
+	TaskDescription string         `db:"task_description" json:"task_description"`
+	AgentName       string         `db:"agent_name" json:"agent_name"`
+	AgentCommand    string         `db:"agent_command" json:"agent_command"`
+	WorktreePath    string         `db:"worktree_path" json:"worktree_path"`
+	BaseDirectoryID string         `db:"base_directory_id" json:"base_directory_id"`
+	AgentTmuxID     sql.NullString `db:"agent_tmux_id" json:"agent_tmux_id"`
+	ProjectID       int64          `db:"project_id" json:"project_id"`
+	ProjectName     string         `db:"project_name" json:"project_name"`
 }
 
 func (q *Queries) GetTaskExecutionWithDetails(ctx context.Context, id int64) (GetTaskExecutionWithDetailsRow, error) {
@@ -126,6 +128,7 @@ func (q *Queries) GetTaskExecutionWithDetails(ctx context.Context, id int64) (Ge
 		&i.AgentCommand,
 		&i.WorktreePath,
 		&i.BaseDirectoryID,
+		&i.AgentTmuxID,
 		&i.ProjectID,
 		&i.ProjectName,
 	)
@@ -172,22 +175,25 @@ func (q *Queries) GetTaskExecutionsByAgentID(ctx context.Context, agentID int64)
 const getTaskExecutionsByTaskID = `-- name: GetTaskExecutionsByTaskID :many
 SELECT 
     te.id, te.task_id, te.agent_id, te.worktree_id, te.status, te.created_at, te.updated_at,
-    a.name as agent_name
+    a.name as agent_name,
+    w.agent_tmux_id
 FROM task_executions te
 JOIN agents a ON te.agent_id = a.id
+LEFT JOIN worktrees w ON te.worktree_id = w.id
 WHERE te.task_id = ?
 ORDER BY te.created_at
 `
 
 type GetTaskExecutionsByTaskIDRow struct {
-	ID         int64        `db:"id" json:"id"`
-	TaskID     int64        `db:"task_id" json:"task_id"`
-	AgentID    int64        `db:"agent_id" json:"agent_id"`
-	WorktreeID int64        `db:"worktree_id" json:"worktree_id"`
-	Status     string       `db:"status" json:"status"`
-	CreatedAt  sql.NullTime `db:"created_at" json:"created_at"`
-	UpdatedAt  sql.NullTime `db:"updated_at" json:"updated_at"`
-	AgentName  string       `db:"agent_name" json:"agent_name"`
+	ID          int64          `db:"id" json:"id"`
+	TaskID      int64          `db:"task_id" json:"task_id"`
+	AgentID     int64          `db:"agent_id" json:"agent_id"`
+	WorktreeID  int64          `db:"worktree_id" json:"worktree_id"`
+	Status      string         `db:"status" json:"status"`
+	CreatedAt   sql.NullTime   `db:"created_at" json:"created_at"`
+	UpdatedAt   sql.NullTime   `db:"updated_at" json:"updated_at"`
+	AgentName   string         `db:"agent_name" json:"agent_name"`
+	AgentTmuxID sql.NullString `db:"agent_tmux_id" json:"agent_tmux_id"`
 }
 
 func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) ([]GetTaskExecutionsByTaskIDRow, error) {
@@ -208,6 +214,7 @@ func (q *Queries) GetTaskExecutionsByTaskID(ctx context.Context, taskID int64) (
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AgentName,
+			&i.AgentTmuxID,
 		); err != nil {
 			return nil, err
 		}
@@ -226,23 +233,26 @@ const listTaskExecutions = `-- name: ListTaskExecutions :many
 SELECT 
     te.id, te.task_id, te.agent_id, te.worktree_id, te.status, te.created_at, te.updated_at,
     t.title as task_title,
-    a.name as agent_name
+    a.name as agent_name,
+    w.agent_tmux_id
 FROM task_executions te
 JOIN tasks t ON te.task_id = t.id
 JOIN agents a ON te.agent_id = a.id
+LEFT JOIN worktrees w ON te.worktree_id = w.id
 ORDER BY te.created_at DESC
 `
 
 type ListTaskExecutionsRow struct {
-	ID         int64        `db:"id" json:"id"`
-	TaskID     int64        `db:"task_id" json:"task_id"`
-	AgentID    int64        `db:"agent_id" json:"agent_id"`
-	WorktreeID int64        `db:"worktree_id" json:"worktree_id"`
-	Status     string       `db:"status" json:"status"`
-	CreatedAt  sql.NullTime `db:"created_at" json:"created_at"`
-	UpdatedAt  sql.NullTime `db:"updated_at" json:"updated_at"`
-	TaskTitle  string       `db:"task_title" json:"task_title"`
-	AgentName  string       `db:"agent_name" json:"agent_name"`
+	ID          int64          `db:"id" json:"id"`
+	TaskID      int64          `db:"task_id" json:"task_id"`
+	AgentID     int64          `db:"agent_id" json:"agent_id"`
+	WorktreeID  int64          `db:"worktree_id" json:"worktree_id"`
+	Status      string         `db:"status" json:"status"`
+	CreatedAt   sql.NullTime   `db:"created_at" json:"created_at"`
+	UpdatedAt   sql.NullTime   `db:"updated_at" json:"updated_at"`
+	TaskTitle   string         `db:"task_title" json:"task_title"`
+	AgentName   string         `db:"agent_name" json:"agent_name"`
+	AgentTmuxID sql.NullString `db:"agent_tmux_id" json:"agent_tmux_id"`
 }
 
 func (q *Queries) ListTaskExecutions(ctx context.Context) ([]ListTaskExecutionsRow, error) {
@@ -264,6 +274,7 @@ func (q *Queries) ListTaskExecutions(ctx context.Context) ([]ListTaskExecutionsR
 			&i.UpdatedAt,
 			&i.TaskTitle,
 			&i.AgentName,
+			&i.AgentTmuxID,
 		); err != nil {
 			return nil, err
 		}

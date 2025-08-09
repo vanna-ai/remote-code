@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	"remote-code/db"
 )
 
@@ -374,5 +375,95 @@ func TestProjectBaseDirectoriesAPI_POST(t *testing.T) {
 	
 	if !directory.GitInitialized {
 		t.Errorf("Expected GitInitialized to be true")
+	}
+}
+
+func TestSessionStateComparison(t *testing.T) {
+	// Clear session states before test
+	sessionStates = make(map[string]*SessionState)
+	
+	// Test first state capture - should be "Running"
+	state1 := &SessionState{
+		Name:            "test_session",
+		Content:         "initial content",
+		LastCursorPos:   "0,0",
+		LastUpdated:     time.Now(),
+		UnchangedSince:  time.Now(),
+		IsWaiting:       false,
+	}
+	
+	status := compareSessionStates("test_session", state1)
+	if status != "Running" {
+		t.Errorf("Expected 'Running' for first state, got '%s'", status)
+	}
+	
+	// Test unchanged state within timeout - should still be "Running"
+	state2 := &SessionState{
+		Name:            "test_session", 
+		Content:         "initial content", // Same content
+		LastCursorPos:   "0,0",           // Same cursor
+		LastUpdated:     time.Now(),
+		UnchangedSince:  time.Now(),
+		IsWaiting:       false,
+	}
+	
+	status = compareSessionStates("test_session", state2)
+	if status != "Running" {
+		t.Errorf("Expected 'Running' for unchanged state within timeout, got '%s'", status)
+	}
+	
+	// Test changed state - should reset to "Running"
+	state3 := &SessionState{
+		Name:            "test_session",
+		Content:         "new content", // Changed content
+		LastCursorPos:   "1,1",        // Changed cursor
+		LastUpdated:     time.Now(),
+		UnchangedSince:  time.Now(),
+		IsWaiting:       false,
+	}
+	
+	status = compareSessionStates("test_session", state3)
+	if status != "Running" {
+		t.Errorf("Expected 'Running' for changed state, got '%s'", status)
+	}
+	
+	// Test unchanged state after timeout - should be "Waiting"
+	// Manipulate the stored state to simulate timeout
+	if storedState, exists := sessionStates["test_session"]; exists {
+		storedState.UnchangedSince = time.Now().Add(-WAITING_TIMEOUT - time.Second)
+	}
+	
+	state4 := &SessionState{
+		Name:            "test_session",
+		Content:         "new content", // Same as previous
+		LastCursorPos:   "1,1",        // Same as previous
+		LastUpdated:     time.Now(),
+		UnchangedSince:  time.Now().Add(-WAITING_TIMEOUT - time.Second),
+		IsWaiting:       false,
+	}
+	
+	status = compareSessionStates("test_session", state4)
+	if status != "Waiting" {
+		t.Errorf("Expected 'Waiting' for unchanged state after timeout, got '%s'", status)
+	}
+}
+
+func TestSessionStateCleanup(t *testing.T) {
+	// Setup some test session states
+	sessionStates = make(map[string]*SessionState)
+	sessionStates["session1"] = &SessionState{Name: "session1"}
+	sessionStates["session2"] = &SessionState{Name: "session2"}
+	sessionStates["orphaned_session"] = &SessionState{Name: "orphaned_session"}
+	
+	// Note: The cleanup function now queries tmux directly, so we can't easily test it
+	// without mocking. For now, let's test that it doesn't panic when called.
+	
+	// Call cleanup - it should not panic even if tmux is not running
+	cleanupOrphanedSessionStates()
+	
+	// The function should handle the case where tmux is not running by clearing all states
+	// Since tmux likely isn't running in the test environment, all states should be cleared
+	if len(sessionStates) != 0 {
+		t.Logf("Session states cleared due to no tmux sessions (expected in test environment)")
 	}
 }

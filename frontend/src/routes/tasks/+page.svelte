@@ -21,6 +21,16 @@
 		await loadTasks();
 		await loadAgents();
 		await loadWorktrees();
+		
+		// Periodically refresh task executions to update waiting status
+		const refreshInterval = setInterval(async () => {
+			await loadTaskExecutions();
+		}, 10000); // Refresh every 10 seconds
+		
+		// Cleanup interval on component destroy
+		return () => {
+			clearInterval(refreshInterval);
+		};
 	});
 
 	async function loadTaskExecutions() {
@@ -103,9 +113,10 @@
 	}
 
 	function getStatusColor(status) {
-		switch (status) {
+		switch (status?.toLowerCase()) {
 			case 'completed': return 'bg-green-500';
 			case 'running': return 'bg-blue-500';
+			case 'waiting': return 'bg-yellow-500';
 			case 'failed': return 'bg-red-500';
 			case 'pending': return 'bg-gray-500';
 			default: return 'bg-gray-500';
@@ -113,9 +124,10 @@
 	}
 
 	function getStatusText(status) {
-		switch (status) {
+		switch (status?.toLowerCase()) {
 			case 'completed': return 'Completed';
 			case 'running': return 'Running';
+			case 'waiting': return 'Waiting';
 			case 'failed': return 'Failed';
 			case 'pending': return 'Pending';
 			default: return 'Unknown';
@@ -226,7 +238,22 @@
 							<div class="flex-1">
 								<div class="flex items-center gap-3 mb-2">
 									<h3 class="text-lg font-semibold text-white">{execution.task_title || `Task ${execution.task_id}`}</h3>
-									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getStatusColor(execution.status)}">
+									<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-white {getStatusColor(execution.status)}">
+										{#if execution.status?.toLowerCase() === 'waiting'}
+											<svg class="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+												<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+											</svg>
+										{:else if execution.status?.toLowerCase() === 'running'}
+											<div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+										{:else if execution.status?.toLowerCase() === 'completed'}
+											<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+												<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+											</svg>
+										{:else if execution.status?.toLowerCase() === 'failed'}
+											<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+												<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+											</svg>
+										{/if}
 										{getStatusText(execution.status)}
 									</span>
 								</div>
@@ -251,16 +278,24 @@
 											Created: {new Date(execution.created_at).toLocaleString()}
 										</div>
 									{/if}
+									{#if execution.status?.toLowerCase() === 'waiting'}
+										<div class="flex items-center text-yellow-400 text-xs mt-1">
+											<svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+												<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+											</svg>
+											May need user input
+										</div>
+									{/if}
 								</div>
 							</div>
 							<div class="flex gap-2 ml-4">
 								<a 
 									href="/tasks/{execution.id}"
-									class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors inline-block"
+									class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors inline-block {execution.status?.toLowerCase() === 'waiting' ? 'ring-2 ring-yellow-400 ring-opacity-50' : ''}"
 								>
-									View Details
+									{execution.status?.toLowerCase() === 'waiting' ? 'Check Session' : 'View Details'}
 								</a>
-								{#if execution.status === 'running'}
+								{#if execution.status?.toLowerCase() === 'running'}
 									<button class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors">
 										Stop
 									</button>

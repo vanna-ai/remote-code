@@ -43,10 +43,21 @@
 			loadGitStatus();
 		}, 1000);
 		
+		// Periodically refresh task execution details to update waiting status
+		const executionRefreshInterval = setInterval(async () => {
+			// Only refresh if not currently loading to avoid conflicts
+			if (!loading) {
+				await loadTaskExecutionDetails();
+			}
+		}, 10000); // Refresh every 10 seconds
+		
 		return () => {
 			if (gitStatusPoll) {
 				clearInterval(gitStatusPoll);
 				gitStatusPoll = null;
+			}
+			if (executionRefreshInterval) {
+				clearInterval(executionRefreshInterval);
 			}
 			if (ws) {
 				ws.close();
@@ -521,9 +532,10 @@
 	}
 
 	function getStatusColor(status) {
-		switch (status) {
+		switch (status?.toLowerCase()) {
 			case 'completed': return 'text-green-400 bg-green-500/20 border-green-500';
 			case 'running': return 'text-blue-400 bg-blue-500/20 border-blue-500';
+			case 'waiting': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500';
 			case 'failed': return 'text-red-400 bg-red-500/20 border-red-500';
 			case 'pending': return 'text-gray-400 bg-gray-500/20 border-gray-500';
 			default: return 'text-gray-400 bg-gray-500/20 border-gray-500';
@@ -667,11 +679,34 @@
 						<div>
 							<div class="flex items-center gap-3 mb-1">
 								<h1 class="text-2xl font-bold text-white">{execution.task_title || `Task ${execution.task_id}`}</h1>
-								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getStatusColor(execution.status)}">
+								<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold border {getStatusColor(execution.status)}">
+									{#if execution.status?.toLowerCase() === 'waiting'}
+										<svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+										</svg>
+									{:else if execution.status?.toLowerCase() === 'running'}
+										<div class="w-2 h-2 bg-current rounded-full animate-pulse"></div>
+									{:else if execution.status?.toLowerCase() === 'completed'}
+										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+										</svg>
+									{:else if execution.status?.toLowerCase() === 'failed'}
+										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+										</svg>
+									{/if}
 									{execution.status.toUpperCase()}
 								</span>
 							</div>
 							<p class="text-gray-300">Task Execution #{execution.id}</p>
+							{#if execution.status?.toLowerCase() === 'waiting'}
+								<div class="flex items-center text-yellow-400 text-sm mt-2 bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
+									<svg class="w-4 h-4 mr-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+										<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+									</svg>
+									<strong>Agent may be waiting for user input.</strong> Check the terminal below.
+								</div>
+							{/if}
 						</div>
 					</div>
 					

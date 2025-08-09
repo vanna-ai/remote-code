@@ -974,6 +974,136 @@ type TmuxSession struct {
 	IsTask    bool   `json:"is_task"`
 }
 
+// SessionState stores the state of a tmux session for comparison
+type SessionState struct {
+	Name            string    `json:"name"`
+	Content         string    `json:"content"`
+	LastCursorPos   string    `json:"last_cursor_pos"`
+	LastUpdated     time.Time `json:"last_updated"`
+	UnchangedSince  time.Time `json:"unchanged_since"`
+	IsWaiting       bool      `json:"is_waiting"`
+}
+
+// Global storage for session states
+var sessionStates = make(map[string]*SessionState)
+var sessionStatesMutex = make(map[string]*time.Time)
+
+// Configuration for waiting detection
+const WAITING_TIMEOUT = 30 * time.Second // Consider session waiting after 30 seconds of no change
+
+// determineTaskExecutionStatus checks if a task execution is waiting based on its tmux session
+func determineTaskExecutionStatus(sessionName string) string {
+	if sessionName == "" {
+		return "Running" // No session means not waiting
+	}
+	
+	// Capture current session state
+	currentState, err := captureSessionState(sessionName)
+	if err != nil {
+		// If we can't capture state, assume it's running (session might be ending, etc.)
+		return "Running"
+	}
+	
+	// Compare with previous state to determine if waiting
+	status := compareSessionStates(sessionName, currentState)
+	return status
+}
+
+// cleanupOrphanedSessionStates removes state entries for sessions that no longer exist
+func cleanupOrphanedSessionStates() {
+	// Get current tmux sessions to clean up orphaned states
+	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
+	output, err := cmd.Output()
+	if err != nil {
+		// If tmux isn't running or has no sessions, clear all states
+		sessionStates = make(map[string]*SessionState)
+		return
+	}
+	
+	currentSessionNames := make(map[string]bool)
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		if line != "" {
+			currentSessionNames[line] = true
+		}
+	}
+	
+	// Remove states for sessions that no longer exist
+	for sessionName := range sessionStates {
+		if !currentSessionNames[sessionName] {
+			delete(sessionStates, sessionName)
+		}
+	}
+}
+
+// captureSessionState captures the current state of a tmux session for comparison
+func captureSessionState(sessionName string) (*SessionState, error) {
+	now := time.Now()
+	
+	// Capture the session content
+	contentCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-e", "-p")
+	contentOutput, err := contentCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture session content: %v", err)
+	}
+	content := strings.TrimSpace(string(contentOutput))
+	
+	// Capture cursor position for more precise state detection
+	cursorCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{cursor_x},#{cursor_y}")
+	cursorOutput, err := cursorCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture cursor position: %v", err)
+	}
+	cursorPos := strings.TrimSpace(string(cursorOutput))
+	
+	return &SessionState{
+		Name:          sessionName,
+		Content:       content,
+		LastCursorPos: cursorPos,
+		LastUpdated:   now,
+		UnchangedSince: now, // Will be updated in compareSessionStates if unchanged
+		IsWaiting:     false,
+	}, nil
+}
+
+// compareSessionStates compares current state with previous state and updates waiting status
+func compareSessionStates(sessionName string, currentState *SessionState) string {
+	previousState, exists := sessionStates[sessionName]
+	
+	// If no previous state exists, this is the first capture
+	if !exists {
+		sessionStates[sessionName] = currentState
+		return "Running"
+	}
+	
+	// Compare content and cursor position to detect changes
+	hasChanged := previousState.Content != currentState.Content || 
+		         previousState.LastCursorPos != currentState.LastCursorPos
+	
+	if hasChanged {
+		// Session has changed - reset waiting state
+		currentState.UnchangedSince = currentState.LastUpdated
+		currentState.IsWaiting = false
+		sessionStates[sessionName] = currentState
+		return "Running"
+	} else {
+		// Session hasn't changed - preserve the unchanged timestamp
+		currentState.UnchangedSince = previousState.UnchangedSince
+		
+		// Check if it's been unchanged long enough to be considered waiting
+		timeSinceLastChange := currentState.LastUpdated.Sub(currentState.UnchangedSince)
+		if timeSinceLastChange >= WAITING_TIMEOUT {
+			currentState.IsWaiting = true
+			sessionStates[sessionName] = currentState
+			return "Waiting"
+		} else {
+			currentState.IsWaiting = false
+			sessionStates[sessionName] = currentState
+			return "Running"
+		}
+	}
+}
+
 func getTmuxSessions() ([]TmuxSession, error) {
 	// Get list of tmux sessions
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{session_created}")
@@ -1472,6 +1602,15 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				return
 			}
 			
+			// Update status based on tmux session waiting detection if it has an active session
+			if execution.AgentTmuxID.Valid {
+				sessionName := execution.AgentTmuxID.String
+				waitingStatus := determineTaskExecutionStatus(sessionName)
+				if waitingStatus == "Waiting" {
+					execution.Status = "Waiting"
+				}
+			}
+			
 			json.NewEncoder(w).Encode(execution)
 			return
 		}
@@ -1498,6 +1637,20 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			executions = []db.GetTaskExecutionsByTaskIDRow{}
 		}
 		
+		// Clean up orphaned session states periodically
+		cleanupOrphanedSessionStates()
+		
+		// Update status based on tmux session waiting detection
+		for i := range executions {
+			if executions[i].AgentTmuxID.Valid {
+				sessionName := executions[i].AgentTmuxID.String
+				waitingStatus := determineTaskExecutionStatus(sessionName)
+				if waitingStatus == "Waiting" {
+					executions[i].Status = "Waiting"
+				}
+			}
+		}
+		
 		json.NewEncoder(w).Encode(executions)
 			return
 		}
@@ -1514,6 +1667,20 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		// Ensure we return empty array instead of null
 		if executions == nil {
 			executions = []db.ListTaskExecutionsRow{}
+		}
+		
+		// Clean up orphaned session states periodically
+		cleanupOrphanedSessionStates()
+		
+		// Update status based on tmux session waiting detection
+		for i := range executions {
+			if executions[i].AgentTmuxID.Valid {
+				sessionName := executions[i].AgentTmuxID.String
+				waitingStatus := determineTaskExecutionStatus(sessionName)
+				if waitingStatus == "Waiting" {
+					executions[i].Status = "Waiting"
+				}
+			}
 		}
 		
 		json.NewEncoder(w).Encode(executions)
