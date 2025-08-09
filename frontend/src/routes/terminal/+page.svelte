@@ -17,6 +17,9 @@
 	let canvasAddon;
 	let loading = true;
 	let showGlobalTerminal = false;
+	let isConnected = false;
+	let terminalReady = false;
+	let connectionError = null;
 
 	onMount(() => {
 		loadSessions();
@@ -60,6 +63,9 @@
 		if (ws) {
 			ws.close();
 		}
+		isConnected = false;
+		terminalReady = false;
+		connectionError = null;
 		if (term) {
 			try {
 				// Dispose addons first to avoid cleanup race conditions
@@ -99,22 +105,43 @@
 	}
 
 	function createTerminal(sessionType) {
-		term = new window.Terminal({
-			cursorBlink: true,
-			fontSize: 14,
-			fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-			lineHeight: 1.0,
-			letterSpacing: 0,
-			allowTransparency: false,
-		});
+		try {
+			if (!window.Terminal) {
+				throw new Error('Terminal library not loaded');
+			}
+			
+			term = new window.Terminal({
+				cursorBlink: true,
+				fontSize: 14,
+				fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+				lineHeight: 1.0,
+				letterSpacing: 0,
+				allowTransparency: false,
+			});
+		} catch (error) {
+			console.error('Failed to create terminal:', error);
+			connectionError = 'Failed to initialize terminal: ' + error.message;
+			return;
+		}
 
-		fitAddon = new window.FitAddon.FitAddon();
-		canvasAddon = new window.CanvasAddon.CanvasAddon();
-		term.loadAddon(fitAddon);
-		term.loadAddon(canvasAddon);
+		try {
+			if (!window.FitAddon || !window.CanvasAddon) {
+				throw new Error('Terminal addons not loaded');
+			}
+			
+			fitAddon = new window.FitAddon.FitAddon();
+			canvasAddon = new window.CanvasAddon.CanvasAddon();
+			term.loadAddon(fitAddon);
+			term.loadAddon(canvasAddon);
 
-		term.open(terminalElement);
-		fitAddon.fit();
+			term.open(terminalElement);
+			fitAddon.fit();
+			terminalReady = true;
+		} catch (error) {
+			console.error('Failed to initialize terminal addons:', error);
+			connectionError = 'Failed to initialize terminal addons: ' + error.message;
+			return;
+		}
 
 		// Create WebSocket connection
 		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -127,6 +154,7 @@
 
 		ws.onopen = function() {
 			console.log('WebSocket connected');
+			isConnected = true;
 			if (sessionType !== 'global') {
 				// Attach to tmux session
 				ws.send(`tmux attach -t ${selectedSession.name}\n`);
@@ -139,6 +167,13 @@
 
 		ws.onerror = function(error) {
 			console.error('WebSocket error:', error);
+			isConnected = false;
+			connectionError = 'WebSocket connection error';
+		};
+
+		ws.onclose = function() {
+			console.log('WebSocket disconnected');
+			isConnected = false;
 		};
 
 		term.onData(function(data) {
@@ -156,6 +191,9 @@
 		if (ws) {
 			ws.close();
 		}
+		isConnected = false;
+		terminalReady = false;
+		connectionError = null;
 		if (term) {
 			try {
 				// Dispose addons first to avoid cleanup race conditions
@@ -289,6 +327,36 @@
 						bind:this={terminalElement}
 						class="w-full h-[70vh] focus:outline-none"
 					></div>
+				</div>
+				
+				<!-- Connection Status -->
+				<div class="mt-4 text-sm flex items-center gap-2">
+					{#if connectionError}
+						<div class="flex items-center gap-2 text-red-400">
+							<div class="w-2 h-2 bg-red-400 rounded-full"></div>
+							<span>Error: {connectionError}</span>
+						</div>
+					{:else if isConnected && terminalReady}
+						<div class="flex items-center gap-2 text-green-400">
+							<div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+							<span>Connected</span>
+						</div>
+					{:else if isConnected && !terminalReady}
+						<div class="flex items-center gap-2 text-yellow-400">
+							<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+							<span>Initializing terminal...</span>
+						</div>
+					{:else}
+						<div class="flex items-center gap-2 text-red-400">
+							<div class="w-2 h-2 bg-red-400 rounded-full"></div>
+							<span>Disconnected</span>
+						</div>
+					{/if}
+					{#if selectedSession}
+						<span class="text-gray-400">• Session: <span class="font-mono text-white">{selectedSession.name}</span></span>
+					{:else if showGlobalTerminal}
+						<span class="text-gray-400">• Global Terminal</span>
+					{/if}
 				</div>
 			</div>
 		{:else}

@@ -13,6 +13,9 @@
 	let sessionInfo = null;
 	let loading = true;
 	let error = null;
+	let isConnected = false;
+	let terminalReady = false;
+	let connectionError = null;
 
 	$: sessionId = $page.params.session;
 	$: breadcrumbSegments = [
@@ -28,6 +31,9 @@
 			if (ws) {
 				ws.close();
 			}
+			isConnected = false;
+			terminalReady = false;
+			connectionError = null;
 			if (term) {
 				try {
 					// Dispose addons first to avoid cleanup race conditions
@@ -107,22 +113,48 @@
 			return;
 		}
 
-		term = new window.Terminal({
-			cursorBlink: true,
-			fontSize: 14,
-			fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-			lineHeight: 1.0,
-			letterSpacing: 0,
-			allowTransparency: false,
-		});
+		// Reset connection state
+		isConnected = false;
+		terminalReady = false;
+		connectionError = null;
 
-		fitAddon = new window.FitAddon.FitAddon();
-		canvasAddon = new window.CanvasAddon.CanvasAddon();
-		term.loadAddon(fitAddon);
-		term.loadAddon(canvasAddon);
+		try {
+			if (!window.Terminal) {
+				throw new Error('Terminal library not loaded');
+			}
+			
+			term = new window.Terminal({
+				cursorBlink: true,
+				fontSize: 14,
+				fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+				lineHeight: 1.0,
+				letterSpacing: 0,
+				allowTransparency: false,
+			});
+		} catch (error) {
+			console.error('Failed to create terminal:', error);
+			connectionError = 'Failed to initialize terminal: ' + error.message;
+			return;
+		}
 
-		term.open(terminalElement);
-		fitAddon.fit();
+		try {
+			if (!window.FitAddon || !window.CanvasAddon) {
+				throw new Error('Terminal addons not loaded');
+			}
+			
+			fitAddon = new window.FitAddon.FitAddon();
+			canvasAddon = new window.CanvasAddon.CanvasAddon();
+			term.loadAddon(fitAddon);
+			term.loadAddon(canvasAddon);
+
+			term.open(terminalElement);
+			fitAddon.fit();
+			terminalReady = true;
+		} catch (error) {
+			console.error('Failed to initialize terminal addons:', error);
+			connectionError = 'Failed to initialize terminal addons: ' + error.message;
+			return;
+		}
 
 		// Create WebSocket connection for specific session
 		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -131,6 +163,7 @@
 
 		ws.onopen = function() {
 			console.log('WebSocket connected to session:', sessionId);
+			isConnected = true;
 			// Backend handles session attachment automatically via query parameter
 		};
 
@@ -140,10 +173,13 @@
 
 		ws.onerror = function(error) {
 			console.error('WebSocket error:', error);
+			isConnected = false;
+			connectionError = 'WebSocket connection error';
 		};
 
 		ws.onclose = function() {
 			console.log('WebSocket disconnected');
+			isConnected = false;
 		};
 
 		term.onData(function(data) {
@@ -275,8 +311,28 @@
 				></div>
 			</div>
 			
-			<div class="mt-4 text-sm text-gray-400">
-				<p>Connected to tmux session: <span class="text-green-400 font-mono">{sessionInfo.name}</span></p>
+			<div class="mt-4 text-sm flex items-center gap-2">
+				{#if connectionError}
+					<div class="flex items-center gap-2 text-red-400">
+						<div class="w-2 h-2 bg-red-400 rounded-full"></div>
+						<span>Error: {connectionError}</span>
+					</div>
+				{:else if isConnected && terminalReady}
+					<div class="flex items-center gap-2 text-green-400">
+						<div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+						<span>Connected to tmux session: <span class="font-mono">{sessionInfo.name}</span></span>
+					</div>
+				{:else if isConnected && !terminalReady}
+					<div class="flex items-center gap-2 text-yellow-400">
+						<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+						<span>Initializing terminal for session: <span class="font-mono">{sessionInfo.name}</span></span>
+					</div>
+				{:else}
+					<div class="flex items-center gap-2 text-red-400">
+						<div class="w-2 h-2 bg-red-400 rounded-full"></div>
+						<span>Disconnected from tmux session: <span class="font-mono">{sessionInfo.name}</span></span>
+					</div>
+				{/if}
 			</div>
 		{:else if error}
 			<div class="bg-gray-800 rounded-lg border border-red-600 p-8 text-center">
