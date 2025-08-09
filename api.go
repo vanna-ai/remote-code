@@ -586,7 +586,8 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
             return
         }
         // Check fast-forward possibility: is main an ancestor of branch?
-        _, code, _ := runGit(basePath, "merge-base", "--is-ancestor", mainSHA, branchSHA)
+        // Run in the worktree to avoid any ambiguity with refs; we pass SHAs.
+        _, code, _ := runGit(worktreeDir, "merge-base", "--is-ancestor", mainSHA, branchSHA)
         if code != 0 {
             json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Non fast-forward; rebase required"})
             return
