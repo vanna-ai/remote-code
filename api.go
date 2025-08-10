@@ -12,6 +12,7 @@ import (
     "path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"remote-code/db"
 	
@@ -1012,7 +1013,7 @@ type SessionState struct {
 
 // Global storage for session states
 var sessionStates = make(map[string]*SessionState)
-var sessionStatesMutex = make(map[string]*time.Time)
+var sessionStatesMutex sync.RWMutex
 
 // Configuration for waiting detection
 const WAITING_TIMEOUT = 30 * time.Second // Consider session waiting after 30 seconds of no change
@@ -1042,7 +1043,9 @@ func cleanupOrphanedSessionStates() {
 	output, err := cmd.Output()
 	if err != nil {
 		// If tmux isn't running or has no sessions, clear all states
+		sessionStatesMutex.Lock()
 		sessionStates = make(map[string]*SessionState)
+		sessionStatesMutex.Unlock()
 		return
 	}
 	
@@ -1055,11 +1058,13 @@ func cleanupOrphanedSessionStates() {
 	}
 	
 	// Remove states for sessions that no longer exist
+	sessionStatesMutex.Lock()
 	for sessionName := range sessionStates {
 		if !currentSessionNames[sessionName] {
 			delete(sessionStates, sessionName)
 		}
 	}
+	sessionStatesMutex.Unlock()
 }
 
 // captureSessionState captures the current state of a tmux session for comparison
@@ -1094,6 +1099,9 @@ func captureSessionState(sessionName string) (*SessionState, error) {
 
 // compareSessionStates compares current state with previous state and updates waiting status
 func compareSessionStates(sessionName string, currentState *SessionState) string {
+	sessionStatesMutex.Lock()
+	defer sessionStatesMutex.Unlock()
+	
 	previousState, exists := sessionStates[sessionName]
 	
 	// If no previous state exists, this is the first capture
