@@ -1,11 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
-	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
-	
-	const breadcrumbSegments = [
-		{ label: "Remote-Code", href: "/", icon: "banner" },
-		{ label: "Agents", href: "/agents" }
-	];
+	import Card from '$lib/components/ui/Card.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 	
 	let agents = [];
 	let availableAgents = [];
@@ -214,422 +211,372 @@
 	<title>Agents - Remote-Code</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-900 text-white">
-	<div class="container mx-auto p-6">
-		<!-- Breadcrumb -->
-		<Breadcrumb segments={breadcrumbSegments} />
-		
-		<!-- Header -->
-		<div class="mb-6">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-4">
-					<div class="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
-						<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-						</svg>
-					</div>
-					<div>
-						<h1 class="text-3xl font-bold text-orange-400 mb-1">Agents</h1>
-						<p class="text-gray-300">Configure and manage AI development agents</p>
-					</div>
+<div class="space-y-6">
+	<!-- Page Header -->
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Agents</h1>
+			<p class="mt-2 text-gray-600 dark:text-gray-400">Configure and manage AI development agents</p>
+		</div>
+		<div class="flex items-center space-x-3">
+			<Button onclick={() => showLeaderboard = !showLeaderboard} variant="secondary">
+				<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+				</svg>
+				{showLeaderboard ? 'Hide' : 'Show'} ELO Rankings
+			</Button>
+			<Button onclick={() => showAddAgentForm = true} variant="primary">
+				<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+				</svg>
+				Add Agent
+			</Button>
+		</div>
+	</div>
+
+	<!-- Add Agent Form -->
+	{#if showAddAgentForm}
+		<Card>
+			<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Add New Agent</h3>
+			<form on:submit|preventDefault={() => addAgent(newAgent)} class="space-y-4">
+				<div>
+					<label for="agent-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Agent Name
+					</label>
+					<input 
+						id="agent-name"
+						type="text" 
+						bind:value={newAgent.name}
+						placeholder="e.g., Claude Assistant"
+						class="input-field"
+						required
+					/>
+				</div>
+				<div>
+					<label for="agent-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Command
+					</label>
+					<input 
+						id="agent-command"
+						type="text" 
+						bind:value={newAgent.command}
+						placeholder="e.g., claude"
+						class="input-field"
+						required
+					/>
+				</div>
+				<div>
+					<label for="agent-params" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Parameters (optional)
+					</label>
+					<input 
+						id="agent-params"
+						type="text" 
+						bind:value={newAgent.params}
+						placeholder="e.g., --model claude-3-sonnet"
+						class="input-field"
+					/>
 				</div>
 				<div class="flex gap-3">
-					<button 
-						on:click={() => showLeaderboard = !showLeaderboard}
-						class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-					>
-						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-						</svg>
-						{showLeaderboard ? 'Hide' : 'Show'} ELO Rankings
-					</button>
-					<button 
-						on:click={() => showAddAgentForm = true}
-						class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-					>
-						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-						</svg>
+					<Button type="submit" variant="primary">
 						Add Agent
-					</button>
+					</Button>
+					<Button type="button" onclick={() => showAddAgentForm = false} variant="secondary">
+						Cancel
+					</Button>
 				</div>
-			</div>
-		</div>
+			</form>
+		</Card>
+	{/if}
 
-		<!-- Add Agent Form -->
-		{#if showAddAgentForm}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Add New Agent</h3>
-				<form on:submit|preventDefault={() => addAgent(newAgent)} class="space-y-4">
-					<div>
-						<label for="agent-name" class="block text-sm font-medium text-gray-300 mb-2">
-							Agent Name
-						</label>
-						<input 
-							id="agent-name"
-							type="text" 
-							bind:value={newAgent.name}
-							placeholder="e.g., Claude Assistant"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-							required
-						/>
-					</div>
-					<div>
-						<label for="agent-command" class="block text-sm font-medium text-gray-300 mb-2">
-							Command
-						</label>
-						<input 
-							id="agent-command"
-							type="text" 
-							bind:value={newAgent.command}
-							placeholder="e.g., claude"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-							required
-						/>
-					</div>
-					<div>
-						<label for="agent-params" class="block text-sm font-medium text-gray-300 mb-2">
-							Parameters (optional)
-						</label>
-						<input 
-							id="agent-params"
-							type="text" 
-							bind:value={newAgent.params}
-							placeholder="e.g., --model claude-3-sonnet"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-						/>
-					</div>
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Add Agent
-						</button>
-						<button 
-							type="button"
-							on:click={() => showAddAgentForm = false}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		{/if}
-
-		<!-- Configure Agent Form -->
-		{#if showConfigureForm && configuringAgent}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Configure Agent</h3>
-				<form on:submit|preventDefault={updateAgent} class="space-y-4">
-					<div>
-						<label for="configure-name" class="block text-sm font-medium text-gray-300 mb-2">
-							Agent Name
-						</label>
-						<input 
-							id="configure-name"
-							type="text" 
-							bind:value={configuringAgent.name}
-							placeholder="e.g., Claude Assistant"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-							required
-						/>
-					</div>
-					<div>
-						<label for="configure-command" class="block text-sm font-medium text-gray-300 mb-2">
-							Command
-						</label>
-						<input 
-							id="configure-command"
-							type="text" 
-							bind:value={configuringAgent.command}
-							placeholder="e.g., claude"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-							required
-						/>
-					</div>
-					<div>
-						<label for="configure-params" class="block text-sm font-medium text-gray-300 mb-2">
-							Parameters (optional)
-						</label>
-						<input 
-							id="configure-params"
-							type="text" 
-							bind:value={configuringAgent.params}
-							placeholder="e.g., --model claude-3-sonnet"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-400"
-						/>
-					</div>
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Update Agent
-						</button>
-						<button 
-							type="button"
-							on:click={cancelConfigure}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		{/if}
-
-		<!-- ELO Leaderboard -->
-		{#if showLeaderboard && leaderboard.length > 0}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<div class="flex items-center justify-between mb-4">
-					<h3 class="text-xl font-semibold text-white">ELO Leaderboard</h3>
-					<button 
-						on:click={loadLeaderboard}
-						class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm transition-colors"
-					>
-						Refresh
-					</button>
+	<!-- Configure Agent Form -->
+	{#if showConfigureForm && configuringAgent}
+		<Card>
+			<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Configure Agent</h3>
+			<form on:submit|preventDefault={updateAgent} class="space-y-4">
+				<div>
+					<label for="configure-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Agent Name
+					</label>
+					<input 
+						id="configure-name"
+						type="text" 
+						bind:value={configuringAgent.name}
+						placeholder="e.g., Claude Assistant"
+						class="input-field"
+						required
+					/>
 				</div>
-				<div class="overflow-x-auto">
-					<table class="w-full">
-						<thead>
-							<tr class="border-b border-gray-700">
-								<th class="text-left py-2 text-gray-400">Rank</th>
-								<th class="text-left py-2 text-gray-400">Agent</th>
-								<th class="text-center py-2 text-gray-400">ELO Rating</th>
-								<th class="text-center py-2 text-gray-400">Games</th>
-								<th class="text-center py-2 text-gray-400">W/L/D</th>
-								<th class="text-center py-2 text-gray-400">Win %</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each leaderboard as agent, index}
-								{@const eloInfo = formatELORating(agent.elo_rating?.Valid ? Math.round(agent.elo_rating.Float64) : 1500)}
-								<tr class="border-b border-gray-800 hover:bg-gray-700 transition-colors">
-									<td class="py-3">
-										<span class="inline-flex items-center justify-center w-8 h-8 rounded-full {index < 3 ? 'bg-yellow-500 text-black' : 'bg-gray-600'} text-sm font-bold">
-											{index + 1}
-										</span>
-									</td>
-									<td class="py-3">
-										<div class="flex items-center gap-2">
-											<div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-												<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-												</svg>
-											</div>
-											<span class="text-white font-medium">{agent.name}</span>
-										</div>
-									</td>
-									<td class="py-3 text-center">
-										<div class="flex flex-col items-center">
-											<span class="text-lg font-bold {eloInfo.color}">
-												{agent.elo_rating?.Valid ? Math.round(agent.elo_rating.Float64) : 1500}
-											</span>
-											<span class="text-xs {eloInfo.color}">{eloInfo.label}</span>
-										</div>
-									</td>
-									<td class="py-3 text-center text-white">
-										{agent.games_played?.Valid ? agent.games_played.Int64 : 0}
-									</td>
-									<td class="py-3 text-center">
-										<div class="flex justify-center gap-1 text-xs">
-											<span class="text-green-400">{agent.wins?.Valid ? agent.wins.Int64 : 0}</span>
-											<span class="text-gray-400">/</span>
-											<span class="text-red-400">{agent.losses?.Valid ? agent.losses.Int64 : 0}</span>
-											<span class="text-gray-400">/</span>
-											<span class="text-yellow-400">{agent.draws?.Valid ? agent.draws.Int64 : 0}</span>
-										</div>
-									</td>
-									<td class="py-3 text-center text-white">
-										{agent.win_percentage || 0}%
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+				<div>
+					<label for="configure-command" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Command
+					</label>
+					<input 
+						id="configure-command"
+						type="text" 
+						bind:value={configuringAgent.command}
+						placeholder="e.g., claude"
+						class="input-field"
+						required
+					/>
 				</div>
-			</div>
-		{/if}
+				<div>
+					<label for="configure-params" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Parameters (optional)
+					</label>
+					<input 
+						id="configure-params"
+						type="text" 
+						bind:value={configuringAgent.params}
+						placeholder="e.g., --model claude-3-sonnet"
+						class="input-field"
+					/>
+				</div>
+				<div class="flex gap-3">
+					<Button type="submit" variant="primary">
+						Update Agent
+					</Button>
+					<Button type="button" onclick={cancelConfigure} variant="secondary">
+						Cancel
+					</Button>
+				</div>
+			</form>
+		</Card>
+	{/if}
 
-		<!-- Loading State -->
-		{#if loading}
-			<div class="flex items-center justify-center py-12">
-				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
-				<span class="ml-3 text-gray-300">Loading agents...</span>
+	<!-- ELO Leaderboard -->
+	{#if showLeaderboard && leaderboard.length > 0}
+		<Card>
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-xl font-semibold text-gray-900 dark:text-white">ELO Leaderboard</h3>
+				<Button onclick={loadLeaderboard} variant="ghost" size="sm">
+					Refresh
+				</Button>
 			</div>
-		{:else}
-			<!-- Configured Agents Section -->
-			{#if agents.length > 0}
-				<div class="mb-6">
-					<h3 class="text-lg font-semibold text-white mb-4">Configured Agents</h3>
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-						{#each agents as agent}
-							{@const eloData = getAgentELO(agent.id)}
-							{@const eloInfo = formatELORating(eloData.rating)}
-							<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-orange-400 transition-colors">
-								<div class="flex items-center justify-between mb-4">
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead>
+						<tr class="border-b border-gray-200 dark:border-gray-700">
+							<th class="text-left py-3 text-gray-500 dark:text-gray-400 font-medium">Rank</th>
+							<th class="text-left py-3 text-gray-500 dark:text-gray-400 font-medium">Agent</th>
+							<th class="text-center py-3 text-gray-500 dark:text-gray-400 font-medium">ELO Rating</th>
+							<th class="text-center py-3 text-gray-500 dark:text-gray-400 font-medium">Games</th>
+							<th class="text-center py-3 text-gray-500 dark:text-gray-400 font-medium">W/L/D</th>
+							<th class="text-center py-3 text-gray-500 dark:text-gray-400 font-medium">Win %</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+						{#each leaderboard as agent, index}
+							{@const eloInfo = formatELORating(agent.elo_rating?.Valid ? Math.round(agent.elo_rating.Float64) : 1500)}
+							<tr class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+								<td class="py-4">
+									<span class="inline-flex items-center justify-center w-8 h-8 rounded-full {index < 3 ? 'bg-yellow-500 text-black' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'} text-sm font-bold">
+										{index + 1}
+									</span>
+								</td>
+								<td class="py-4">
 									<div class="flex items-center gap-3">
-										<div class="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
-											<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<div class="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+											<svg class="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
 											</svg>
 										</div>
-										<div>
-											<h4 class="text-lg font-semibold text-white">{agent.name}</h4>
-											<div class="flex items-center gap-2">
-												<span class="text-xs {eloInfo.color}">ELO: {eloData.rating}</span>
-												<span class="text-xs text-gray-400">({eloData.games} games)</span>
-											</div>
-										</div>
+										<span class="text-gray-900 dark:text-white font-medium">{agent.name}</span>
 									</div>
-									<div class="flex items-center gap-2">
-										{#if eloData.games > 0}
-											<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium {eloInfo.color} bg-gray-700">
-												#{eloData.rank}
-											</span>
-										{/if}
-										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white bg-green-500">
-											Configured
+								</td>
+								<td class="py-4 text-center">
+									<div class="flex flex-col items-center">
+										<span class="text-lg font-bold text-gray-900 dark:text-white">
+											{agent.elo_rating?.Valid ? Math.round(agent.elo_rating.Float64) : 1500}
 										</span>
+										<Badge variant={eloInfo.color === 'text-purple-400' ? 'primary' : eloInfo.color === 'text-green-400' ? 'success' : 'secondary'} size="sm">
+											{eloInfo.label}
+										</Badge>
+									</div>
+								</td>
+								<td class="py-4 text-center text-gray-900 dark:text-white">
+									{agent.games_played?.Valid ? agent.games_played.Int64 : 0}
+								</td>
+								<td class="py-4 text-center">
+									<div class="flex justify-center gap-1 text-sm">
+										<span class="text-green-600 dark:text-green-400">{agent.wins?.Valid ? agent.wins.Int64 : 0}</span>
+										<span class="text-gray-400">/</span>
+										<span class="text-red-600 dark:text-red-400">{agent.losses?.Valid ? agent.losses.Int64 : 0}</span>
+										<span class="text-gray-400">/</span>
+										<span class="text-yellow-600 dark:text-yellow-400">{agent.draws?.Valid ? agent.draws.Int64 : 0}</span>
+									</div>
+								</td>
+								<td class="py-4 text-center text-gray-900 dark:text-white">
+									{agent.win_percentage || 0}%
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		</Card>
+	{/if}
+
+	<!-- Loading State -->
+	{#if loading}
+		<div class="flex items-center justify-center py-12">
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+			<span class="ml-3 text-gray-600 dark:text-gray-400">Loading agents...</span>
+		</div>
+	{:else}
+		<!-- Configured Agents Section -->
+		{#if agents.length > 0}
+			<div class="mb-6">
+				<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configured Agents</h3>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+					{#each agents as agent}
+						{@const eloData = getAgentELO(agent.id)}
+						{@const eloInfo = formatELORating(eloData.rating)}
+						<Card class="card-hover">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-3">
+									<div class="w-10 h-10 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+										<svg class="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+										</svg>
+									</div>
+									<div>
+										<h4 class="text-lg font-semibold text-gray-900 dark:text-white">{agent.name}</h4>
+										<div class="flex items-center gap-2">
+											<span class="text-xs text-gray-600 dark:text-gray-400">ELO: {eloData.rating}</span>
+											<span class="text-xs text-gray-500 dark:text-gray-500">({eloData.games} games)</span>
+										</div>
 									</div>
 								</div>
-								
-								{#if eloData.games > 0}
-									<div class="bg-gray-700 rounded-lg p-3 mb-4">
-										<div class="flex justify-between items-center text-xs">
-											<div class="text-center">
-												<div class="text-green-400 font-semibold">{eloData.wins}</div>
-												<div class="text-gray-400">Wins</div>
-											</div>
-											<div class="text-center">
-												<div class="text-red-400 font-semibold">{eloData.losses}</div>
-												<div class="text-gray-400">Losses</div>
-											</div>
-											<div class="text-center">
-												<div class="text-yellow-400 font-semibold">{eloData.draws}</div>
-												<div class="text-gray-400">Draws</div>
-											</div>
-											<div class="text-center">
-												<div class="text-white font-semibold">{eloData.winPercentage}%</div>
-												<div class="text-gray-400">Win Rate</div>
-											</div>
+								<div class="flex items-center gap-2">
+									{#if eloData.games > 0}
+										<Badge variant="secondary" size="sm">
+											#{eloData.rank}
+										</Badge>
+									{/if}
+									<Badge variant="success" size="sm">
+										Configured
+									</Badge>
+								</div>
+							</div>
+							
+							{#if eloData.games > 0}
+								<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-4">
+									<div class="grid grid-cols-4 gap-4 text-center text-sm">
+										<div>
+											<div class="text-green-600 dark:text-green-400 font-semibold">{eloData.wins}</div>
+											<div class="text-gray-500 dark:text-gray-400 text-xs">Wins</div>
 										</div>
+										<div>
+											<div class="text-red-600 dark:text-red-400 font-semibold">{eloData.losses}</div>
+											<div class="text-gray-500 dark:text-gray-400 text-xs">Losses</div>
+										</div>
+										<div>
+											<div class="text-yellow-600 dark:text-yellow-400 font-semibold">{eloData.draws}</div>
+											<div class="text-gray-500 dark:text-gray-400 text-xs">Draws</div>
+										</div>
+										<div>
+											<div class="text-gray-900 dark:text-white font-semibold">{eloData.winPercentage}%</div>
+											<div class="text-gray-500 dark:text-gray-400 text-xs">Win Rate</div>
+										</div>
+									</div>
+								</div>
+							{/if}
+							
+							<div class="space-y-2 mb-4">
+								<div class="text-sm">
+									<span class="text-gray-600 dark:text-gray-400">Command:</span>
+									<span class="text-gray-900 dark:text-white font-mono ml-2">{agent.command}</span>
+								</div>
+								{#if agent.params}
+									<div class="text-sm">
+										<span class="text-gray-600 dark:text-gray-400">Parameters:</span>
+										<span class="text-gray-900 dark:text-white font-mono ml-2">{agent.params}</span>
 									</div>
 								{/if}
-								
-								<div class="space-y-2 mb-4">
-									<div class="text-sm">
-										<span class="text-gray-400">Command:</span>
-										<span class="text-white font-mono ml-2">{agent.command}</span>
-									</div>
-									{#if agent.params}
-										<div class="text-sm">
-											<span class="text-gray-400">Parameters:</span>
-											<span class="text-white font-mono ml-2">{agent.params}</span>
-										</div>
-									{/if}
-								</div>
+							</div>
 
-								<div class="flex gap-2">
-									<button 
-										on:click={() => startConfiguring(agent)}
-										class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm transition-colors"
-									>
-										Configure
-									</button>
-									<button 
-										on:click={() => removeAgent(agent.id)}
-										class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors"
-									>
-										Remove
-									</button>
+							<div class="flex gap-2">
+								<Button onclick={() => startConfiguring(agent)} variant="primary" class="flex-1">
+									Configure
+								</Button>
+								<Button onclick={() => removeAgent(agent.id)} variant="danger">
+									Remove
+								</Button>
+							</div>
+						</Card>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Available Agents Section -->
+		<Card>
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-semibold text-gray-900 dark:text-white">Available Agents</h3>
+				{#if detecting}
+					<div class="flex items-center gap-2">
+						<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+						<span class="text-sm text-gray-600 dark:text-gray-400">Detecting...</span>
+					</div>
+				{:else}
+					<Button onclick={detectAgents} variant="ghost" size="sm">
+						Refresh Detection
+					</Button>
+				{/if}
+			</div>
+			
+			{#if availableAgents.length > 0}
+				<p class="text-gray-600 dark:text-gray-400 mb-4">
+					AI development agents found on your system. Click "Add" to configure them.
+				</p>
+				
+				{#if availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)).length > 0}
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						{#each availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)) as agent}
+							<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+								<div class="flex items-center justify-between">
+									<div>
+										<h4 class="font-medium text-gray-900 dark:text-white">{agent.name}</h4>
+										<p class="text-sm text-gray-600 dark:text-gray-400 font-mono">{agent.path}</p>
+									</div>
+									<Button onclick={() => addDetectedAgent(agent)} variant="primary" size="sm">
+										Add
+									</Button>
 								</div>
 							</div>
 						{/each}
 					</div>
-				</div>
-			{/if}
-
-			<!-- Available Agents Section -->
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
-				<div class="flex items-center justify-between mb-4">
-					<h3 class="text-lg font-semibold text-white">Available Agents</h3>
-					{#if detecting}
-						<div class="flex items-center gap-2">
-							<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-400"></div>
-							<span class="text-sm text-gray-400">Detecting...</span>
-						</div>
-					{:else}
-						<button 
-							on:click={detectAgents}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm transition-colors"
-						>
-							Refresh Detection
-						</button>
-					{/if}
-				</div>
-				
-				{#if availableAgents.length > 0}
-					<p class="text-gray-400 mb-4">
-						AI development agents found on your system. Click "Add" to configure them.
-					</p>
-					
-					{#if availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)).length > 0}
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-							{#each availableAgents.filter(agent => agent.available && !agents.some(configured => configured.command === agent.command)) as agent}
-								<div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
-									<div class="flex items-center justify-between">
-										<div>
-											<h4 class="font-medium text-white">{agent.name}</h4>
-											<p class="text-sm text-gray-400 font-mono">{agent.path}</p>
-										</div>
-										<button 
-											on:click={() => addDetectedAgent(agent)}
-											class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm transition-colors"
-										>
-											Add
-										</button>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-gray-500 text-center py-4">
-							All available agents are already configured.
-						</p>
-					{/if}
 				{:else}
-					<p class="text-gray-500 text-center py-4">
-						{#if detecting}
-							Scanning for available agents...
-						{:else}
-							No AI development agents were detected. You can manually add agents using the "Add Agent" button above.
-						{/if}
+					<p class="text-gray-500 dark:text-gray-400 text-center py-4">
+						All available agents are already configured.
 					</p>
 				{/if}
-			</div>
-			
-			<!-- Empty State (only when no configured agents AND no detection has run) -->
-			{#if agents.length === 0 && availableAgents.length === 0 && !detecting}
-				<div class="text-center py-12">
-					<div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
-						<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-						</svg>
-					</div>
-					<h3 class="text-xl font-semibold text-gray-300 mb-2">No Agents Configured</h3>
-					<p class="text-gray-400 mb-4">Add AI development agents to execute tasks</p>
-					<button 
-						on:click={detectAgents}
-						class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors"
-					>
-						Detect Available Agents
-					</button>
-				</div>
+			{:else}
+				<p class="text-gray-500 dark:text-gray-400 text-center py-4">
+					{#if detecting}
+						Scanning for available agents...
+					{:else}
+						No AI development agents were detected. You can manually add agents using the "Add Agent" button above.
+					{/if}
+				</p>
 			{/if}
+		</Card>
+		
+		<!-- Empty State (only when no configured agents AND no detection has run) -->
+		{#if agents.length === 0 && availableAgents.length === 0 && !detecting}
+			<Card class="text-center py-12">
+				<div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
+					<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+					</svg>
+				</div>
+				<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Agents Configured</h3>
+				<p class="text-gray-600 dark:text-gray-400 mb-4">Add AI development agents to execute tasks</p>
+				<Button onclick={detectAgents} variant="primary">
+					Detect Available Agents
+				</Button>
+			</Card>
 		{/if}
-	</div>
+	{/if}
 </div>

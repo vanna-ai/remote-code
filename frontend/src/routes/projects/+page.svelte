@@ -1,11 +1,8 @@
 <script>
 	import { onMount } from 'svelte';
-	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
-	
-	const breadcrumbSegments = [
-		{ label: "Remote-Code", href: "/", icon: "banner" },
-		{ label: "Projects", href: "/projects" }
-	];
+	import Card from '$lib/components/ui/Card.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
 	
 	let projects = [];
 	let loading = true;
@@ -27,7 +24,6 @@
 			loading = false;
 		} catch (error) {
 			console.error('Failed to load projects:', error);
-			// Fallback to empty array if API fails
 			projects = [];
 			loading = false;
 		}
@@ -43,7 +39,7 @@
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					root_id: 1, // For now, use a default root_id
+					root_id: 1,
 					name: newProject.name
 				})
 			});
@@ -67,131 +63,200 @@
 	<title>Projects - Remote-Code</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-900 text-white">
-	<div class="container mx-auto p-6">
-		<!-- Breadcrumb -->
-		<Breadcrumb segments={breadcrumbSegments} />
-		
-		<!-- Header -->
-		<div class="mb-6">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-4">
-					<div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-						<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
-						</svg>
-					</div>
-					<div>
-						<h1 class="text-3xl font-bold text-blue-400 mb-1">Projects</h1>
-						<p class="text-gray-300">Manage your development projects and repositories</p>
-					</div>
-				</div>
-				<button 
-					on:click={() => showCreateForm = true}
-					class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-				>
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-					</svg>
-					New Project
-				</button>
-			</div>
+<div class="space-y-6">
+	<!-- Page Header -->
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Projects</h1>
+			<p class="mt-2 text-gray-600 dark:text-gray-400">Manage your development projects and repositories</p>
 		</div>
+		<Button onclick={() => showCreateForm = true} variant="primary">
+			<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+			</svg>
+			New Project
+		</Button>
+	</div>
 
-		<!-- Create Project Form -->
-		{#if showCreateForm}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Create New Project</h3>
-				<form on:submit|preventDefault={createProject} class="space-y-4">
-					<div>
-						<label for="project-name" class="block text-sm font-medium text-gray-300 mb-2">
-							Project Name
-						</label>
-						<input 
-							id="project-name"
-							type="text" 
-							bind:value={newProject.name}
-							placeholder="Enter project name"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-							required
-						/>
-					</div>
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Create Project
-						</button>
-						<button 
-							type="button"
-							on:click={() => showCreateForm = false}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		{/if}
-
-		<!-- Projects Grid -->
-		{#if loading}
-			<div class="flex items-center justify-center py-12">
-				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
-			</div>
-		{:else if projects.length === 0}
-			<div class="text-center py-12">
-				<div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
-					<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
-					</svg>
+	<!-- Create Project Form -->
+	{#if showCreateForm}
+		<Card>
+			<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Create New Project</h3>
+			<form on:submit|preventDefault={createProject} class="space-y-4">
+				<div>
+					<label for="project-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						Project Name
+					</label>
+					<input 
+						id="project-name"
+						type="text" 
+						bind:value={newProject.name}
+						placeholder="Enter project name"
+						class="input-field"
+						required
+					/>
 				</div>
-				<h3 class="text-xl font-semibold text-gray-300 mb-2">No Projects Yet</h3>
-				<p class="text-gray-400 mb-4">Create your first project to get started</p>
-				<button 
-					on:click={() => showCreateForm = true}
-					class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-				>
-					Create Project
-				</button>
+				<div class="flex gap-3">
+					<Button type="submit" variant="primary">
+						Create Project
+					</Button>
+					<Button type="button" onclick={() => showCreateForm = false} variant="secondary">
+						Cancel
+					</Button>
+				</div>
+			</form>
+		</Card>
+	{/if}
+
+	<!-- Projects Content -->
+	{#if loading}
+		<div class="flex items-center justify-center py-12">
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+		</div>
+	{:else if projects.length === 0}
+		<Card class="text-center py-12">
+			<div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
+				<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
+				</svg>
 			</div>
-		{:else}
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-				{#each projects as project}
-					<a href="/projects/{project.id || encodeURIComponent(project.name)}" class="block bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-blue-400 hover:bg-gray-750 transition-colors cursor-pointer">
-						<div class="flex items-center gap-3 mb-4">
-							<div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-								<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Projects Yet</h3>
+			<p class="text-gray-600 dark:text-gray-400 mb-4">Create your first project to get started</p>
+			<Button onclick={() => showCreateForm = true} variant="primary">
+				Create Project
+			</Button>
+		</Card>
+	{:else}
+		<!-- Projects Grid -->
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+			{#each projects as project}
+				<Card class="card-hover group cursor-pointer" onclick={() => window.location.href = `/projects/${project.id || encodeURIComponent(project.name)}`}>
+					<div class="flex items-start justify-between mb-4">
+						<div class="flex items-center gap-3">
+							<div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+								<svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
 								</svg>
 							</div>
-							<h3 class="text-lg font-semibold text-white">{project.name}</h3>
+							<div>
+								<h3 class="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+									{project.name}
+								</h3>
+							</div>
 						</div>
-						
-						<div class="space-y-2 mb-4">
-							<div class="flex items-center text-sm text-gray-400">
+						<div class="opacity-0 group-hover:opacity-100 transition-opacity">
+							<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+							</svg>
+						</div>
+					</div>
+					
+					<div class="space-y-3 mb-4">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center text-sm text-gray-600 dark:text-gray-400">
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 								</svg>
-								{(project.baseDirectories || []).length} directories
+								Directories
 							</div>
-							<div class="flex items-center text-sm text-gray-400">
+							<Badge variant="secondary" size="sm">
+								{(project.baseDirectories || []).length}
+							</Badge>
+						</div>
+						<div class="flex items-center justify-between">
+							<div class="flex items-center text-sm text-gray-600 dark:text-gray-400">
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
-								{(project.tasks || []).length} tasks
+								Tasks
 							</div>
+							<Badge variant="primary" size="sm">
+								{(project.tasks || []).length}
+							</Badge>
 						</div>
+					</div>
 
-						<div class="flex gap-2">
-							<div class="flex-1 bg-blue-500 text-white px-3 py-2 rounded text-sm text-center">
+					<div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+						<div class="flex items-center justify-between">
+							<span class="text-sm text-gray-500 dark:text-gray-400">
+								{project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Recently created'}
+							</span>
+							<div class="flex items-center text-sm text-blue-600 dark:text-blue-400 font-medium">
 								Open Project
+								<svg class="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+								</svg>
 							</div>
 						</div>
-					</a>
-				{/each}
+					</div>
+				</Card>
+			{/each}
+		</div>
+
+		<!-- Projects Table View (Alternative) -->
+		<Card class="hidden">
+			<div class="px-4 py-5 sm:p-6">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="text-lg font-medium text-gray-900 dark:text-white">All Projects</h3>
+					<div class="flex items-center space-x-2">
+						<Button variant="ghost" size="sm">
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+							</svg>
+							Filter
+						</Button>
+						<Button variant="ghost" size="sm">
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
+							</svg>
+							Sort
+						</Button>
+					</div>
+				</div>
+				<div class="overflow-hidden">
+					<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+						<thead class="bg-gray-50 dark:bg-gray-800">
+							<tr>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Directories</th>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tasks</th>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+								<th class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
+							</tr>
+						</thead>
+						<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+							{#each projects as project}
+								<tr class="table-row">
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="flex items-center">
+											<div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mr-3">
+												<svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
+												</svg>
+											</div>
+											<div class="text-sm font-medium text-gray-900 dark:text-white">{project.name}</div>
+										</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<Badge variant="secondary" size="sm">{(project.baseDirectories || []).length}</Badge>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<Badge variant="primary" size="sm">{(project.tasks || []).length}</Badge>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+										{project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Recently'}
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+										<Button href="/projects/{project.id || encodeURIComponent(project.name)}" variant="ghost" size="sm">
+											Open
+										</Button>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			</div>
-		{/if}
-	</div>
+		</Card>
+	{/if}
 </div>
