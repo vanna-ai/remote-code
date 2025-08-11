@@ -12,8 +12,8 @@
 		{ label: "", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
 		{ label: execution?.project_name || "Project", href: execution?.project_id ? `/projects/${execution.project_id}` : "/projects" },
-		{ label: execution?.task_title ? (execution.task_title.length > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/tasks?task_id=${execution.task_id}` : "#" },
-		{ label: execution?.agent_name || `Agent`, href: `/tasks/${$page.params.id}` }
+		{ label: execution?.task_title ? (execution.task_title.length > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/task-executions?task_id=${execution.task_id}` : "#" },
+		{ label: execution?.agent_name || `Agent`, href: `/task-executions/${$page.params.id}` }
 	];
 
 	let terminalElement;
@@ -36,6 +36,7 @@
 	let isSendingInput = false;
 	let isResendingTask = false;
 	let isDeleting = false;
+	let isRejecting = false;
     let gitStatusPoll = null;
 
 	$: executionId = $page.params.id;
@@ -652,7 +653,7 @@
 			
 			if (response.ok) {
 				// Navigate back to tasks list
-				goto('/tasks');
+				goto('/task-executions');
 			} else {
 				const errorData = await response.text();
 				alert(`Failed to delete task execution: ${errorData}`);
@@ -662,6 +663,35 @@
 			alert('Failed to delete task execution');
 		} finally {
 			isDeleting = false;
+		}
+	}
+
+	async function rejectTaskExecution() {
+		if (isRejecting) return;
+		
+		// Show confirmation dialog
+		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n• Set the status to "rejected"\n• Mark this as a loss against other agents for ELO calculation\n• This action cannot be undone.`);
+		
+		if (!confirmed) return;
+		
+		try {
+			isRejecting = true;
+			const response = await fetch(`/api/task-executions/${executionId}/reject`, {
+				method: 'POST'
+			});
+			
+			if (response.ok) {
+				// Refresh the execution data to update the status
+				await loadTaskExecutionDetails();
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to reject task execution: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to reject task execution:', err);
+			alert('Failed to reject task execution');
+		} finally {
+			isRejecting = false;
 		}
 	}
 </script>
@@ -717,8 +747,14 @@
 										</h1>
 										<StatusBadge status={execution.status?.toLowerCase()} />
 									</div>
-									<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-										Task Execution #{execution.id}
+									<p class="mt-1 text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-600">
+											{execution.agent_name || `Agent ${execution.agent_id}`}
+										</span>
+										<span>working in</span>
+										<code class="px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded border">
+											{execution.worktree_path || 'unknown path'}
+										</code>
 									</p>
 								</div>
 							</div>
@@ -751,6 +787,18 @@
 								{/if}
 								
 								<Button 
+									variant="warning"
+									onclick={rejectTaskExecution}
+									disabled={isRejecting || execution.status === 'rejected'}
+									loading={isRejecting}
+								>
+									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+									</svg>
+									{isRejecting ? 'Rejecting...' : 'Reject'}
+								</Button>
+
+								<Button 
 									variant="danger"
 									onclick={deleteTaskExecution}
 									disabled={isDeleting}
@@ -777,109 +825,7 @@
 					</Card>
 				{/if}
 
-				<!-- Execution Info Grid -->
-				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-					<!-- Execution Details -->
-					<Card>
-						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-							</svg>
-							Execution Details
-						</h3>
-						<div class="space-y-3 text-sm">
-							<div class="flex justify-between">
-								<span class="text-gray-500 dark:text-gray-400">Status:</span>
-								<StatusBadge status={execution.status?.toLowerCase()} size="sm" />
-							</div>
-							<div class="flex justify-between">
-								<span class="text-gray-500 dark:text-gray-400">Agent:</span>
-								<span class="font-mono text-orange-600 dark:text-orange-400">{execution.agent_name || `Agent ${execution.agent_id}`}</span>
-							</div>
-							<div class="flex justify-between">
-								<span class="text-gray-500 dark:text-gray-400">Created:</span>
-								<span class="text-gray-900 dark:text-gray-100">{formatDate(execution.created_at)}</span>
-							</div>
-							{#if execution.updated_at}
-								<div class="flex justify-between">
-									<span class="text-gray-500 dark:text-gray-400">Updated:</span>
-									<span class="text-gray-900 dark:text-gray-100">{formatDate(execution.updated_at)}</span>
-								</div>
-							{/if}
-						</div>
-					</Card>
 
-					<!-- Worktree Info -->
-					<Card>
-						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
-							</svg>
-							Worktree
-						</h3>
-						<div class="space-y-3 text-sm">
-							<div>
-								<span class="text-gray-500 dark:text-gray-400 block">Path:</span>
-								<span class="font-mono text-yellow-600 dark:text-yellow-400 text-xs break-all">{execution.worktree_path || 'N/A'}</span>
-							</div>
-							<div class="flex justify-between">
-								<span class="text-gray-500 dark:text-gray-400">Base Directory:</span>
-								<span class="font-mono text-blue-600 dark:text-blue-400">{execution.base_directory_id || 'N/A'}</span>
-							</div>
-						</div>
-					</Card>
-
-					<!-- Git Status -->
-					<Card>
-						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-							</svg>
-							Git Status
-						</h3>
-						{#if gitStatus}
-							<div class="space-y-3 text-sm">
-								<div class="flex justify-between">
-									<span class="text-gray-500 dark:text-gray-400">Branch:</span>
-									<span class="font-mono text-green-600 dark:text-green-400">{gitStatus.currentBranch}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-gray-500 dark:text-gray-400">Status:</span>
-									<span class="font-mono {gitStatus.isDirty ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}">
-										{gitStatus.isDirty ? 'Modified' : 'Clean'}
-									</span>
-								</div>
-								{#if gitStatus.ahead || gitStatus.behind}
-									<div class="flex justify-between">
-										<span class="text-gray-500 dark:text-gray-400">Sync:</span>
-										<span class="font-mono text-blue-600 dark:text-blue-400">
-											{#if gitStatus.ahead}+{gitStatus.ahead}{/if}
-											{#if gitStatus.behind} -{gitStatus.behind}{/if}
-										</span>
-									</div>
-								{/if}
-								<div class="flex justify-between">
-									<span class="text-gray-500 dark:text-gray-400">Changes:</span>
-									<span class="font-mono text-gray-900 dark:text-gray-100">
-										{gitStatus.staged}S {gitStatus.unstaged}M {gitStatus.untracked}?
-									</span>
-								</div>
-								{#if gitStatus.mergeConflicts}
-									<div class="flex items-center gap-2 text-red-600 dark:text-red-400">
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-										</svg>
-										<span class="text-sm">Merge conflicts</span>
-									</div>
-								{/if}
-							</div>
-						{:else}
-							<div class="text-gray-500 dark:text-gray-400 text-sm">
-								<p>Git status not available</p>
-							</div>
-						{/if}
-					</Card>
-				</div>
 
 				<!-- Re-send Task Button (always show if running) -->
 				{#if execution.status === 'running'}
@@ -1151,7 +1097,7 @@
 				<h3 class="text-xl font-semibold text-red-800 dark:text-red-200 mb-2">Task Execution Not Available</h3>
 				<p class="text-red-600 dark:text-red-300 mb-6">{error}</p>
 				<div class="flex gap-3 justify-center">
-					<Button href="/tasks" variant="secondary">
+					<Button href="/task-executions" variant="secondary">
 						View All Executions
 					</Button>
 					<Button href="/" variant="primary">

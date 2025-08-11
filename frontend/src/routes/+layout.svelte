@@ -19,7 +19,7 @@
 		{ label: 'Dashboard', href: '/', icon: 'dashboard' },
 		{ label: 'Terminal', href: '/terminal', icon: 'terminal', badge: stats.active_sessions || undefined },
 		{ label: 'Projects', href: '/projects', icon: 'projects', badge: stats.projects || undefined },
-		{ label: 'Tasks', href: '/tasks', icon: 'tasks', badge: stats.task_executions || undefined },
+		{ label: 'Task Executions', href: '/task-executions', icon: 'tasks', badge: stats.task_executions || undefined },
 		{ label: 'Agents', href: '/agents', icon: 'agents', badge: stats.agents || undefined },
 		{ label: 'Directories', href: '/directories', icon: 'directories' },
 		{ label: 'Settings', href: '/settings', icon: 'settings' }

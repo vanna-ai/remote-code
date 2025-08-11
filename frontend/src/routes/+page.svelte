@@ -67,7 +67,7 @@
 			value={loading ? '...' : stats.task_executions}
 			icon="tasks"
 			color="purple"
-			href="/tasks"
+			href="/task-executions"
 			{loading}
 		/>
 		<StatsCard
@@ -106,7 +106,7 @@
 							<Button 
 								size="sm" 
 								variant="outline"
-								onclick={() => window.location.href = `/tasks/${execution.id}`}
+								onclick={() => window.location.href = `/task-executions/${execution.id}`}
 							>
 								Review
 							</Button>
@@ -143,7 +143,7 @@
 							<Button 
 								size="sm" 
 								variant="default"
-								onclick={() => window.location.href = `/tasks/${execution.id}`}
+								onclick={() => window.location.href = `/task-executions/${execution.id}`}
 							>
 								Check Session
 							</Button>

@@ -365,7 +365,7 @@
 								class="card-hover cursor-pointer border-yellow-200 dark:border-yellow-800 hover:border-yellow-400 dark:hover:border-yellow-600"
 								onclick={() => {
 									if (session.execution_id) {
-										goto(`/tasks/${session.execution_id}`);
+										goto(`/task-executions/${session.execution_id}`);
 									} else {
 										attachToSession(session);
 									}

@@ -1058,7 +1058,7 @@
 												<div class="flex flex-wrap gap-1">
 													{#each taskExecutions.get(task.id) as execution}
 														<a 
-															href="/tasks/{execution.id}"
+															href="/task-executions/{execution.id}"
 															class="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-600 hover:bg-purple-200 dark:hover:bg-purple-700 text-purple-800 dark:text-purple-100 px-2 py-1 rounded text-xs transition-colors"
 															on:click|stopPropagation
 														>
@@ -1127,7 +1127,7 @@
 													<div class="flex flex-wrap gap-1">
 														{#each taskExecutions.get(task.id) as execution}
 															<a 
-																href="/tasks/{execution.id}"
+																href="/task-executions/{execution.id}"
 																class="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-600 hover:bg-purple-200 dark:hover:bg-purple-700 text-purple-800 dark:text-purple-100 px-2 py-1 rounded text-xs transition-colors"
 																on:click|stopPropagation
 															>
@@ -1272,7 +1272,7 @@
 											<StatusBadge status={execution.status || 'pending'} size="sm" />
 										</div>
 										<Button 
-											href="/tasks/{execution.id}"
+											href="/task-executions/{execution.id}"
 											variant="primary"
 											size="xs"
 										>

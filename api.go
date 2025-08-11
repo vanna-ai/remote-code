@@ -932,6 +932,11 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 						Status:   execution.Status,
 					}
 					
+					// Skip rejected executions from dashboard sections
+					if execution.Status == "rejected" {
+						continue
+					}
+					
 					// Check if agent is waiting for user input
 					// First check stored status
 					isWaiting := execution.Status == "Waiting" || execution.Status == "waiting"
@@ -1678,6 +1683,12 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		return
 	}
 
+	// Handle sub-endpoints like /api/task-executions/{id}/reject
+	if len(pathParts) >= 2 && pathParts[1] == "reject" {
+		handleRejectTaskExecution(w, r, ctx, pathParts)
+		return
+	}
+
 	switch r.Method {
 	case "DELETE":
 		// Handle task execution deletion
@@ -2198,6 +2209,69 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		"session":          sessionName,
 		"task_title":       task.Title,
 		"task_description": task.Description,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleRejectTaskExecution(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if len(pathParts) < 1 {
+		http.Error(w, "Task execution ID required", http.StatusBadRequest)
+		return
+	}
+
+	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get the task execution to check current status
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	if err != nil {
+		log.Printf("Failed to get task execution: %v", err)
+		http.Error(w, "Task execution not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if already rejected
+	if execution.Status == "rejected" {
+		http.Error(w, "Task execution is already rejected", http.StatusBadRequest)
+		return
+	}
+
+	// Update status to "rejected"
+	_, err = queries.UpdateTaskExecutionStatus(ctx, db.UpdateTaskExecutionStatusParams{
+		ID:     executionID,
+		Status: "rejected",
+	})
+	if err != nil {
+		log.Printf("Failed to update task execution status: %v", err)
+		http.Error(w, "Failed to reject task execution", http.StatusInternalServerError)
+		return
+	}
+
+	// Record ELO losses against all other agents for the same task
+	go func() {
+		// Use a new context for background processing
+		bgCtx := context.Background()
+		bgQueries := db.New(database)
+		
+		err := recordELOLossesForRejectedTask(bgCtx, bgQueries, execution.TaskID, execution.AgentID)
+		if err != nil {
+			log.Printf("Failed to record ELO losses for rejected task %d: %v", execution.TaskID, err)
+		}
+	}()
+
+	// Return success response
+	response := map[string]interface{}{
+		"success": true,
+		"message": "Task execution rejected successfully",
+		"status":  "rejected",
 	}
 	json.NewEncoder(w).Encode(response)
 }

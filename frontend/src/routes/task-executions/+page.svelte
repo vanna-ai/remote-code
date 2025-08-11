@@ -318,8 +318,8 @@
 									{execution.created_at ? new Date(execution.created_at).toLocaleDateString() : 'Recently'}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-									<Button href="/tasks/{execution.id}" variant="ghost" size="sm">
-										{execution.status?.toLowerCase() === 'waiting' ? 'Check Session' : 'View'}
+									<Button href="/task-executions/{execution.id}" variant="ghost" size="sm">
+										{execution.status?.toLowerCase() === 'waiting' ? 'Check Session' : 'View Details'}
 									</Button>
 									<Button onclick={() => deleteTaskExecution(execution.id)} variant="danger" size="sm" disabled={deletingExecutions.has(execution.id)}>
 										{#if deletingExecutions.has(execution.id)}

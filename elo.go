@@ -292,6 +292,76 @@ func (e *ELOCalculator) ProcessTaskCompetitionsWithWinner(ctx context.Context, t
 	return result, nil
 }
 
+// recordELOLossesForRejectedTask records ELO losses for a rejected task execution against all other agents
+func recordELOLossesForRejectedTask(ctx context.Context, queries *db.Queries, taskID int64, rejectedAgentID int64) error {
+	calculator := NewELOCalculator(queries)
+	
+	// Get all executions for this task
+	executions, err := queries.ListTaskExecutionsByTaskID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to list task executions: %w", err)
+	}
+
+	// Find the rejected execution and all other executions
+	var rejectedExecution *db.TaskExecution
+	var otherExecutions []db.TaskExecution
+
+	for i := range executions {
+		if executions[i].AgentID == rejectedAgentID {
+			rejectedExecution = &executions[i]
+		} else {
+			otherExecutions = append(otherExecutions, executions[i])
+		}
+	}
+
+	if rejectedExecution == nil {
+		return fmt.Errorf("rejected agent %d has no execution for task %d", rejectedAgentID, taskID)
+	}
+
+	// Create competitions: each other agent vs rejected agent (other agents win)
+	for _, otherExecution := range otherExecutions {
+		// Check if competition already exists for this task and agent pair
+		existing, err := queries.GetExistingCompetition(ctx, db.GetExistingCompetitionParams{
+			TaskID:            taskID,
+			Agent1ID:          otherExecution.AgentID,
+			Agent2ID:          rejectedAgentID,
+			Agent1ExecutionID: otherExecution.ID,
+			Agent2ExecutionID: rejectedExecution.ID,
+		})
+		if err == nil && existing.ID != 0 {
+			continue // Competition already exists
+		}
+
+		// Also check reverse order
+		existing, err = queries.GetExistingCompetition(ctx, db.GetExistingCompetitionParams{
+			TaskID:            taskID,
+			Agent1ID:          rejectedAgentID,
+			Agent2ID:          otherExecution.AgentID,
+			Agent1ExecutionID: rejectedExecution.ID,
+			Agent2ExecutionID: otherExecution.ID,
+		})
+		if err == nil && existing.ID != 0 {
+			continue // Competition already exists
+		}
+
+		// Record competition with other agent winning (rejected agent loses)
+		_, err = calculator.RecordCompetition(ctx, CompetitionParams{
+			TaskID:            taskID,
+			Agent1ID:          otherExecution.AgentID,
+			Agent2ID:          rejectedAgentID,
+			Agent1ExecutionID: otherExecution.ID,
+			Agent2ExecutionID: rejectedExecution.ID,
+			Result:            Agent1Wins, // Other agent wins, rejected agent loses
+		})
+		if err != nil {
+			return fmt.Errorf("failed to record competition between agents %d and %d: %w", 
+				otherExecution.AgentID, rejectedAgentID, err)
+		}
+	}
+
+	return nil
+}
+
 func (e *ELOCalculator) ProcessTaskCompetitions(ctx context.Context, taskID int64) (*TaskCompetitionResult, error) {
 	executions, err := e.queries.ListTaskExecutionsByTaskID(ctx, taskID)
 	if err != nil {

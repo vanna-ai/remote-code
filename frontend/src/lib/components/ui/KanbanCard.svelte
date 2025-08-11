@@ -62,7 +62,7 @@
 			{#if showDropdown}
 				<div class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
 					<div class="py-1">
-						<a href="/tasks/{task.id}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+						<a href="/task-executions/{task.id}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
 							View Details
 						</a>
 						{#if onStatusChange}
@@ -125,7 +125,7 @@
 		</Badge>
 		
 		{#if task.status?.toLowerCase() === 'waiting'}
-			<a href="/tasks/{task.id}" class="text-xs text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300 font-medium">
+			<a href="/task-executions/{task.id}" class="text-xs text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300 font-medium">
 				Check Session
 			</a>
 		{/if}
