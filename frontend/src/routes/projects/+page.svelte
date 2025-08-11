@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import Card from '$lib/components/ui/Card.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -130,7 +131,7 @@
 		<!-- Projects Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 			{#each projects as project}
-				<Card class="card-hover group cursor-pointer" onclick={() => window.location.href = `/projects/${project.id || encodeURIComponent(project.name)}`}>
+				<Card class="card-hover group cursor-pointer" onclick={() => goto(`/projects/${project.id}`)}>
 					<div class="flex items-start justify-between mb-4">
 						<div class="flex items-center gap-3">
 							<div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
@@ -247,7 +248,7 @@
 										{project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Recently'}
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-										<Button href="/projects/{project.id || encodeURIComponent(project.name)}" variant="ghost" size="sm">
+										<Button onclick={() => goto(`/projects/${project.id}`)} variant="ghost" size="sm">
 											Open
 										</Button>
 									</td>

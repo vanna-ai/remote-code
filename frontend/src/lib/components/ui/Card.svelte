@@ -5,6 +5,7 @@
 		shadow?: 'none' | 'sm' | 'md' | 'lg';
 		border?: boolean;
 		rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+		onclick?: () => void;
 	}
 
 	let {
@@ -13,6 +14,7 @@
 		shadow = 'sm',
 		border = true,
 		rounded = 'lg',
+		onclick,
 		children
 	}: Props = $props();
 
@@ -39,8 +41,19 @@
 	};
 </script>
 
+{#if onclick}
+<div
+	class="bg-white dark:bg-gray-800 {border ? 'border border-gray-200 dark:border-gray-700' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {className}"
+	onclick={onclick}
+	role="button"
+	tabindex="0"
+>
+	{@render children?.()}
+</div>
+{:else}
 <div
 	class="bg-white dark:bg-gray-800 {border ? 'border border-gray-200 dark:border-gray-700' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {className}"
 >
 	{@render children?.()}
 </div>
+{/if}

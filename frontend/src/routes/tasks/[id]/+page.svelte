@@ -3,6 +3,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	
 	$: breadcrumbSegments = [
 		{ label: "Remote-Code", href: "/", icon: "banner" },
@@ -667,122 +671,117 @@
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </svelte:head>
 
-<div class="min-h-screen bg-gray-900 text-white">
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
 	<div class="container mx-auto p-6">
 		<!-- Breadcrumb -->
 		<Breadcrumb segments={breadcrumbSegments} />
 		
 		<!-- Header -->
 		<div class="mb-6">
-			
 			{#if loading}
-				<div class="flex items-center gap-4">
-					<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
-					<div>
-						<h1 class="text-2xl font-bold text-purple-400">Loading Task Execution...</h1>
-						<p class="text-gray-300">Fetching execution details</p>
+				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+					<div class="flex items-center gap-4">
+						<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+						<div>
+							<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Loading Task Execution...</h1>
+							<p class="text-gray-600 dark:text-gray-400">Fetching execution details</p>
+						</div>
 					</div>
 				</div>
 			{:else if error}
-				<div class="flex items-center gap-4">
-					<svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-					</svg>
-					<div>
-						<h1 class="text-2xl font-bold text-red-400">Execution Not Found</h1>
-						<p class="text-gray-300">{error}</p>
+				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+					<div class="flex items-center gap-4">
+						<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+						</svg>
+						<div>
+							<h1 class="text-2xl font-bold text-red-500">Execution Not Found</h1>
+							<p class="text-gray-600 dark:text-gray-400">{error}</p>
+						</div>
 					</div>
 				</div>
 			{:else if execution}
-				<div class="flex items-center justify-between mb-6">
-					<div class="flex items-center gap-4">
-						<div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
-							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-							</svg>
-						</div>
-						<div>
-							<div class="flex items-center gap-3 mb-1">
-								<h1 class="text-2xl font-bold text-white">{execution.task_title || `Task ${execution.task_id}`}</h1>
-								<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold border {getStatusColor(execution.status)}">
-									{#if execution.status?.toLowerCase() === 'waiting'}
-										<svg class="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-											<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-										</svg>
-									{:else if execution.status?.toLowerCase() === 'running'}
-										<div class="w-2 h-2 bg-current rounded-full animate-pulse"></div>
-									{:else if execution.status?.toLowerCase() === 'completed'}
-										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-											<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-										</svg>
-									{:else if execution.status?.toLowerCase() === 'failed'}
-										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-											<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-										</svg>
-									{/if}
-									{execution.status.toUpperCase()}
-								</span>
-							</div>
-							<p class="text-gray-300">Task Execution #{execution.id}</p>
-							{#if execution.status?.toLowerCase() === 'waiting'}
-								<div class="flex items-center text-yellow-400 text-sm mt-2 bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
-									<svg class="w-4 h-4 mr-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-										<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+					<div class="flex items-center justify-between">
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-4 mb-2">
+								<div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+									<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 									</svg>
-									<strong>Agent may be waiting for user input.</strong> Check the terminal below.
 								</div>
-							{/if}
+								<div>
+									<div class="flex items-center gap-3">
+										<h1 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+											{execution.task_title || `Task ${execution.task_id}`}
+										</h1>
+										<StatusBadge status={execution.status?.toLowerCase() === 'waiting' ? 'pending' : execution.status?.toLowerCase()} />
+									</div>
+									<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+										Task Execution #{execution.id}
+									</p>
+								</div>
+							</div>
 						</div>
-					</div>
-					
-					<div class="flex gap-2">
-						<button 
-							on:click={() => runDevServer()}
-							disabled={devServerRunning}
-							class="bg-green-500 hover:bg-green-600 disabled:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-						>
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-							</svg>
-							{devServerRunning ? 'Dev Server Running' : 'Run Dev Server'}
-						</button>
-							
-							{#if devServerRunning}
-								<button 
-									on:click={() => stopDevServer()}
-									class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9l6 6m0-6l-6 6"/>
-									</svg>
-									Stop Dev Server
-								</button>
-							{/if}
 						
-						<!-- Delete Task Execution Button -->
-						<button 
-							on:click={deleteTaskExecution}
-							disabled={isDeleting}
-							class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-						>
-							{#if isDeleting}
-								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-							{:else}
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-								</svg>
-							{/if}
-							{isDeleting ? 'Deleting...' : 'Delete'}
-						</button>
+						<div class="flex items-center gap-3 ml-6">
+							<div class="flex gap-2">
+								<Button 
+									variant={devServerRunning ? 'secondary' : 'success'}
+									onclick={() => runDevServer()}
+									disabled={devServerRunning}
+								>
+									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+									</svg>
+									{devServerRunning ? 'Dev Server Running' : 'Run Dev Server'}
+								</Button>
+									
+								{#if devServerRunning}
+									<Button 
+										variant="danger"
+										onclick={() => stopDevServer()}
+									>
+										<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9l6 6m0-6l-6 6"/>
+										</svg>
+										Stop Dev Server
+									</Button>
+								{/if}
+								
+								<Button 
+									variant="danger"
+									onclick={deleteTaskExecution}
+									disabled={isDeleting}
+									loading={isDeleting}
+								>
+									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+									</svg>
+									{isDeleting ? 'Deleting...' : 'Delete'}
+								</Button>
+							</div>
+						</div>
 					</div>
 				</div>
+
+				{#if execution.status?.toLowerCase() === 'waiting'}
+					<Card class="mb-6 border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20">
+						<div class="flex items-center text-yellow-800 dark:text-yellow-200">
+							<svg class="w-5 h-5 mr-3 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+								<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+							</svg>
+							<strong>Agent may be waiting for user input.</strong> Check the terminal below.
+						</div>
+					</Card>
+				{/if}
 
 				<!-- Execution Info Grid -->
 				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 					<!-- Execution Details -->
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
-						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+					<Card>
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 							</svg>
@@ -790,31 +789,29 @@
 						</h3>
 						<div class="space-y-3 text-sm">
 							<div class="flex justify-between">
-								<span class="text-gray-400">Status:</span>
-								<span class="font-mono {execution.status === 'completed' ? 'text-green-400' : execution.status === 'running' ? 'text-blue-400' : execution.status === 'failed' ? 'text-red-400' : 'text-gray-400'}">
-									{execution.status}
-								</span>
+								<span class="text-gray-500 dark:text-gray-400">Status:</span>
+								<StatusBadge status={execution.status?.toLowerCase() === 'waiting' ? 'pending' : execution.status?.toLowerCase()} size="sm" />
 							</div>
 							<div class="flex justify-between">
-								<span class="text-gray-400">Agent:</span>
-								<span class="font-mono text-orange-400">{execution.agent_name || `Agent ${execution.agent_id}`}</span>
+								<span class="text-gray-500 dark:text-gray-400">Agent:</span>
+								<span class="font-mono text-orange-600 dark:text-orange-400">{execution.agent_name || `Agent ${execution.agent_id}`}</span>
 							</div>
 							<div class="flex justify-between">
-								<span class="text-gray-400">Created:</span>
-								<span class="text-gray-300">{formatDate(execution.created_at)}</span>
+								<span class="text-gray-500 dark:text-gray-400">Created:</span>
+								<span class="text-gray-900 dark:text-gray-100">{formatDate(execution.created_at)}</span>
 							</div>
 							{#if execution.updated_at}
 								<div class="flex justify-between">
-									<span class="text-gray-400">Updated:</span>
-									<span class="text-gray-300">{formatDate(execution.updated_at)}</span>
+									<span class="text-gray-500 dark:text-gray-400">Updated:</span>
+									<span class="text-gray-900 dark:text-gray-100">{formatDate(execution.updated_at)}</span>
 								</div>
 							{/if}
 						</div>
-					</div>
+					</Card>
 
 					<!-- Worktree Info -->
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
-						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+					<Card>
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 							</svg>
@@ -822,19 +819,19 @@
 						</h3>
 						<div class="space-y-3 text-sm">
 							<div>
-								<span class="text-gray-400 block">Path:</span>
-								<span class="font-mono text-yellow-400 text-xs">{execution.worktree_path || 'N/A'}</span>
+								<span class="text-gray-500 dark:text-gray-400 block">Path:</span>
+								<span class="font-mono text-yellow-600 dark:text-yellow-400 text-xs break-all">{execution.worktree_path || 'N/A'}</span>
 							</div>
 							<div class="flex justify-between">
-								<span class="text-gray-400">Base Directory:</span>
-								<span class="font-mono text-blue-400">{execution.base_directory_id || 'N/A'}</span>
+								<span class="text-gray-500 dark:text-gray-400">Base Directory:</span>
+								<span class="font-mono text-blue-600 dark:text-blue-400">{execution.base_directory_id || 'N/A'}</span>
 							</div>
 						</div>
-					</div>
+					</Card>
 
 					<!-- Git Status -->
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
-						<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+					<Card>
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
 							</svg>
@@ -843,32 +840,32 @@
 						{#if gitStatus}
 							<div class="space-y-3 text-sm">
 								<div class="flex justify-between">
-									<span class="text-gray-400">Branch:</span>
-									<span class="font-mono text-green-400">{gitStatus.currentBranch}</span>
+									<span class="text-gray-500 dark:text-gray-400">Branch:</span>
+									<span class="font-mono text-green-600 dark:text-green-400">{gitStatus.currentBranch}</span>
 								</div>
 								<div class="flex justify-between">
-									<span class="text-gray-400">Status:</span>
-									<span class="font-mono {gitStatus.isDirty ? 'text-yellow-400' : 'text-green-400'}">
+									<span class="text-gray-500 dark:text-gray-400">Status:</span>
+									<span class="font-mono {gitStatus.isDirty ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'}">
 										{gitStatus.isDirty ? 'Modified' : 'Clean'}
 									</span>
 								</div>
 								{#if gitStatus.ahead || gitStatus.behind}
 									<div class="flex justify-between">
-										<span class="text-gray-400">Sync:</span>
-										<span class="font-mono text-blue-400">
+										<span class="text-gray-500 dark:text-gray-400">Sync:</span>
+										<span class="font-mono text-blue-600 dark:text-blue-400">
 											{#if gitStatus.ahead}+{gitStatus.ahead}{/if}
 											{#if gitStatus.behind} -{gitStatus.behind}{/if}
 										</span>
 									</div>
 								{/if}
 								<div class="flex justify-between">
-									<span class="text-gray-400">Changes:</span>
-									<span class="font-mono text-gray-300">
+									<span class="text-gray-500 dark:text-gray-400">Changes:</span>
+									<span class="font-mono text-gray-900 dark:text-gray-100">
 										{gitStatus.staged}S {gitStatus.unstaged}M {gitStatus.untracked}?
 									</span>
 								</div>
 								{#if gitStatus.mergeConflicts}
-									<div class="flex items-center gap-2 text-red-400">
+									<div class="flex items-center gap-2 text-red-600 dark:text-red-400">
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 										</svg>
@@ -877,173 +874,182 @@
 								{/if}
 							</div>
 						{:else}
-							<div class="text-gray-400 text-sm">
+							<div class="text-gray-500 dark:text-gray-400 text-sm">
 								<p>Git status not available</p>
 							</div>
 						{/if}
-					</div>
+					</Card>
 				</div>
 
 				<!-- Re-send Task Button (always show if running) -->
 				{#if execution.status === 'running'}
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+					<Card class="mb-6">
 						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-							<h3 class="text-lg font-semibold text-white">Task Controls</h3>
-							<button 
-								on:click={resendTaskToSession}
+							<h3 class="text-lg font-semibold text-gray-900 dark:text-white">Task Controls</h3>
+							<Button 
+								variant="primary"
+								onclick={resendTaskToSession}
 								disabled={isResendingTask}
-								class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+								loading={isResendingTask}
+								size="sm"
 							>
-								{#if isResendingTask}
-									<div class="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-								{:else}
-									<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-									</svg>
-								{/if}
+								<svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+								</svg>
 								{isResendingTask ? 'Sending...' : 'Re-Send Task'}
-							</button>
+							</Button>
 						</div>
-					</div>
+					</Card>
 				{/if}
 
 				<!-- Task Description -->
 				{#if execution.task_description}
-					<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-						<h3 class="text-lg font-semibold text-white mb-3">Task Description</h3>
-						<p class="text-gray-300">{execution.task_description}</p>
-					</div>
+					<Card class="mb-6">
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Task Description</h3>
+						<p class="text-gray-700 dark:text-gray-300">{execution.task_description}</p>
+					</Card>
 				{/if}
 			{/if}
 		</div>
 
     <!-- Git Panel -->
     {#if !loading && !error && execution && gitStatus}
-        <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+        <Card class="mb-6">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-300">Branch</span>
-                    <span class="px-2 py-1 rounded text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500">{gitStatus.currentBranch}</span>
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Branch</span>
+                    <span class="px-2 py-1 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-700">{gitStatus.currentBranch}</span>
                     {#if gitStatus.ahead || gitStatus.behind}
-                        <span class="text-xs text-gray-400">{gitStatus.ahead ? `↑ ${gitStatus.ahead}` : ''} {gitStatus.behind ? `↓ ${gitStatus.behind}` : ''}</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{gitStatus.ahead ? `↑ ${gitStatus.ahead}` : ''} {gitStatus.behind ? `↓ ${gitStatus.behind}` : ''}</span>
                     {/if}
                 </div>
                 <div class="flex items-center gap-2">
-                    <button class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600" on:click={loadGitStatus}>Refresh</button>
-                    <button
-                        class="text-xs px-3 py-1 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed"
+                    <Button variant="ghost" size="xs" onclick={loadGitStatus}>Refresh</Button>
+                    <Button
+                        variant="success"
+                        size="xs"
                         disabled={pushing || !gitStatus.upstream || gitStatus.ahead === 0}
-                        on:click={pushChanges}
-                        title={(!gitStatus.upstream ? 'No upstream configured' : (gitStatus.ahead === 0 ? 'Nothing to push' : 'Push to upstream'))}
+                        onclick={pushChanges}
+                        loading={pushing}
                     >
                         {pushing ? 'Pushing…' : 'Push'}
-                    </button>
+                    </Button>
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                         <span class="inline-flex w-2.5 h-2.5 rounded-full bg-green-400"></span>
                         <span>Staged</span>
                     </h4>
                     {#if gitStatus.stagedFiles?.length}
                         {#each gitStatus.stagedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate">{f.path}</span>
+                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => viewDiff(f.path, true)}>Diff</button>
-                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => unstageFile(f.path)}>Unstage</button>
+                                    <Button variant="ghost" size="xs" onclick={() => viewDiff(f.path, true)}>Diff</Button>
+                                    <Button variant="ghost" size="xs" onclick={() => unstageFile(f.path)}>Unstage</Button>
                                 </div>
                             </div>
                         {/each}
                     {:else}
-                        <div class="text-xs text-gray-500">No staged changes</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">No staged changes</div>
                     {/if}
                 </div>
                 <div>
-                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                         <span class="inline-flex w-2.5 h-2.5 rounded-full bg-orange-400"></span>
                         <span>Changes</span>
                     </h4>
                     {#if gitStatus.unstagedFiles?.length}
                         {#each gitStatus.unstagedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate">{f.path}</span>
+                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => viewDiff(f.path, false)}>Diff</button>
-                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => stageFile(f.path)}>Stage</button>
+                                    <Button variant="ghost" size="xs" onclick={() => viewDiff(f.path, false)}>Diff</Button>
+                                    <Button variant="ghost" size="xs" onclick={() => stageFile(f.path)}>Stage</Button>
                                 </div>
                             </div>
                         {/each}
                     {:else}
-                        <div class="text-xs text-gray-500">No unstaged changes</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">No unstaged changes</div>
                     {/if}
                 </div>
                 <div>
-                    <h4 class="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                         <span class="inline-flex w-2.5 h-2.5 rounded-full bg-sky-400"></span>
                         <span>Untracked</span>
                     </h4>
                     {#if gitStatus.untrackedFiles?.length}
                         {#each gitStatus.untrackedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-900 border border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate">{f.path}</span>
+                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
+                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <button class="text-xs px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded" on:click={() => stageFile(f.path)}>Add</button>
+                                    <Button variant="ghost" size="xs" onclick={() => stageFile(f.path)}>Add</Button>
                                 </div>
                             </div>
                         {/each}
                     {:else}
-                        <div class="text-xs text-gray-500">No untracked files</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">No untracked files</div>
                     {/if}
                 </div>
             </div>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="flex gap-2">
-                    <input class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm" placeholder="Commit message" bind:value={commitMsg} />
-                    <button class="px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-sm disabled:bg-gray-600" disabled={committing || !commitMsg.trim()} on:click={commitChanges}>Commit</button>
+                    <input
+                        type="text"
+                        placeholder="Commit message"
+                        bind:value={commitMsg}
+                        class="flex-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:border-blue-500 focus:ring-blue-500 dark:focus:border-blue-400 dark:focus:ring-blue-400"
+                    />
+                    <Button 
+                        variant="success"
+                        disabled={committing || !commitMsg.trim()}
+                        loading={committing}
+                        onclick={commitChanges}
+                    >
+                        Commit
+                    </Button>
                 </div>
                 <div class="flex gap-2 items-center">
-                    <button class="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
-                            disabled={merging || !mergeReady}
-                            title={mergeReady ? 'Merge the worktree branch into main' : (mergeReadyReason || 'Not ready to merge')}
-                            on:click={mergeBranch}>
+                    <Button 
+                        variant="primary"
+                        disabled={merging || !mergeReady}
+                        loading={merging}
+                        onclick={mergeBranch}
+                    >
                         {merging ? 'Merging…' : 'Merge into main'}
-                    </button>
+                    </Button>
                     {#if !mergeReady && mergeReadyReason}
-                        <span class="text-xs text-gray-400">{mergeReadyReason}</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{mergeReadyReason}</span>
                         {#if mergeReadyReason.includes('Non fast-forward')}
-                            <button class="ml-2 text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700 disabled:opacity-60"
-                                    disabled={updatingFromMain}
-                                    on:click={() => updateFromMain('merge')}>
+                            <Button 
+                                variant="ghost"
+                                size="xs"
+                                disabled={updatingFromMain}
+                                loading={updatingFromMain}
+                                onclick={() => updateFromMain('merge')}
+                            >
                                 {updatingFromMain ? 'Updating…' : 'Update from main'}
-                            </button>
+                            </Button>
                         {/if}
                     {/if}
                 </div>
             </div>
-        </div>
+        </Card>
     {/if}
 
     <!-- Diff Modal -->
-    {#if diffOpen}
-        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div class="bg-gray-900 border border-gray-700 rounded-lg w-[90vw] max-w-4xl max-h-[80vh] overflow-hidden">
-                <div class="flex items-center justify-between p-3 border-b border-gray-700">
-                    <div class="text-sm text-gray-300 truncate">{diffTitle}</div>
-                    <button class="text-gray-400 hover:text-white" on:click={() => diffOpen = false}>✕</button>
-                </div>
-                <div class="p-3 overflow-auto">
-                    <pre class="text-xs leading-snug whitespace-pre-wrap">{diffText || 'No diff'}</pre>
-                </div>
-            </div>
+    <Modal open={diffOpen} title={diffTitle} size="xl" onClose={() => diffOpen = false}>
+        <div class="max-h-[60vh] overflow-auto">
+            <pre class="text-xs leading-snug whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900 p-4 rounded border">{diffText || 'No diff'}</pre>
         </div>
-    {/if}
+    </Modal>
 
     <!-- Terminal -->
 		{#if !loading && !error && execution}
-			<div class="bg-black rounded-lg border border-gray-700 shadow-xl">
-				<div class="flex items-center justify-between p-4 border-b border-gray-700">
+			<Card padding="none" class="bg-black border-gray-600 shadow-xl">
+				<div class="flex items-center justify-between p-4 border-b border-gray-600">
 					<div class="flex items-center gap-3">
 						<div class="flex gap-1">
 							<div class="w-3 h-3 rounded-full bg-red-500"></div>
@@ -1052,7 +1058,7 @@
 						</div>
 						<span class="text-gray-400 text-sm font-mono">tmux attach -t task_{execution.task_id}_agent_{execution.agent_id}</span>
 					</div>
-					<div class="flex items-center gap-2 text-xs text-gray-500">
+					<div class="flex items-center gap-2 text-xs text-gray-400">
 						<div class="w-2 h-2 rounded-full bg-green-500"></div>
 						<span>Connected</span>
 					</div>
@@ -1064,16 +1070,16 @@
 						class="w-full h-[50vh] sm:h-[60vh] focus:outline-none"
 					></div>
 				</div>
-			</div>
+			</Card>
 			
-			<div class="mt-4 text-sm text-gray-400 text-center">
+			<div class="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
 				<p>Terminal connected to task execution session</p>
 			</div>
 
 			<!-- Input Section for Sending Text to Session -->
 			{#if execution.status === 'running'}
-				<div class="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-4">
-					<h4 class="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+				<Card class="mt-6">
+					<h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
 						</svg>
@@ -1086,33 +1092,30 @@
 							on:keydown={handleInputKeydown}
 							placeholder="Type a message and press Enter to send..."
 							disabled={isSendingInput}
-							class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+							class="flex-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:border-blue-500 focus:ring-blue-500 dark:focus:border-blue-400 dark:focus:ring-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
 						/>
-						<button
-							on:click={sendInputToSession}
+						<Button
+							variant="primary"
+							onclick={sendInputToSession}
 							disabled={!inputText.trim() || isSendingInput}
-							class="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 min-w-[80px] sm:min-w-[80px] w-full sm:w-auto"
+							loading={isSendingInput}
 						>
-							{#if isSendingInput}
-								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-							{:else}
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-								</svg>
-							{/if}
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+							</svg>
 							{isSendingInput ? '' : 'Send'}
-						</button>
+						</Button>
 					</div>
-					<p class="text-xs text-gray-400 mt-2">
+					<p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
 						Send text input directly to the agent session. Press Enter or click Send.
 					</p>
-				</div>
+				</Card>
 			{/if}
 
 			<!-- Dev Server Terminal -->
 			{#if showDevTerminal}
-				<div class="mt-6 bg-black rounded-lg border border-green-700 shadow-xl">
-					<div class="flex items-center justify-between p-4 border-b border-green-700">
+				<Card padding="none" class="mt-6 bg-black border-green-600 shadow-xl">
+					<div class="flex items-center justify-between p-4 border-b border-green-600">
 						<div class="flex items-center gap-3">
 							<div class="flex gap-1">
 								<div class="w-3 h-3 rounded-full bg-red-500"></div>
@@ -1122,7 +1125,7 @@
 							<span class="text-green-400 text-sm font-mono">tmux attach -t dev_{execution.worktree_id}</span>
 							<span class="px-2 py-1 rounded text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500">DEV SERVER</span>
 						</div>
-						<div class="flex items-center gap-2 text-xs text-green-500">
+						<div class="flex items-center gap-2 text-xs text-green-400">
 							<div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
 							<span>Running</span>
 						</div>
@@ -1134,34 +1137,28 @@
 							class="w-full h-[40vh] sm:h-[50vh] focus:outline-none"
 						></div>
 					</div>
-				</div>
+				</Card>
 				
-				<div class="mt-4 text-sm text-green-400 text-center">
+				<div class="mt-4 text-sm text-green-600 dark:text-green-400 text-center">
 					<p>Dev server terminal - showing startup logs and output</p>
 				</div>
 			{/if}
 		{:else if error}
-			<div class="bg-gray-800 rounded-lg border border-red-600 p-8 text-center">
-				<svg class="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<Card class="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-8 text-center">
+				<svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 				</svg>
-				<h3 class="text-xl font-semibold text-red-400 mb-2">Task Execution Not Available</h3>
-				<p class="text-gray-400 mb-6">{error}</p>
+				<h3 class="text-xl font-semibold text-red-800 dark:text-red-200 mb-2">Task Execution Not Available</h3>
+				<p class="text-red-600 dark:text-red-300 mb-6">{error}</p>
 				<div class="flex gap-3 justify-center">
-					<a 
-						href="/tasks"
-						class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors"
-					>
+					<Button href="/tasks" variant="secondary">
 						View All Executions
-					</a>
-					<a 
-						href="/"
-						class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg transition-colors"
-					>
+					</Button>
+					<Button href="/" variant="primary">
 						Go to Dashboard
-					</a>
+					</Button>
 				</div>
-			</div>
+			</Card>
 		{/if}
 	</div>
 </div>

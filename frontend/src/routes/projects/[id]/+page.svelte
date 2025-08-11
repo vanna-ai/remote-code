@@ -2,6 +2,17 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import FormField from '$lib/components/ui/FormField.svelte';
+	import Input from '$lib/components/ui/Input.svelte';
+	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import Select from '$lib/components/ui/Select.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
+	import IconButton from '$lib/components/ui/IconButton.svelte';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	
 	$: breadcrumbSegments = [
 		{ label: "Remote-Code", href: "/", icon: "banner" },
@@ -586,182 +597,156 @@
 	<title>{project?.name || 'Project'} - Remote-Code</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-900 text-white">
-	<div class="container mx-auto p-6">
-		<!-- Breadcrumb -->
-		<Breadcrumb segments={breadcrumbSegments} />
-		
-		<!-- Header -->
-		<div class="mb-6">
-			
-			{#if loading}
-				<div class="flex items-center gap-4">
-					<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
-					<span class="text-gray-300">Loading project...</span>
-				</div>
-			{:else if error}
-				<div class="bg-red-900/50 border border-red-500 rounded-lg p-4">
-					<p class="text-red-300">Error: {error}</p>
-				</div>
-			{:else if project}
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-4">
-						<div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-							<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0L5 7l14 4m0 0L5 19l14-4"/>
-							</svg>
-						</div>
-						<div>
-							<div class="flex items-center gap-2 mb-1">
-								<h1 class="text-3xl font-bold text-blue-400">{project.name}</h1>
-								{#if refreshing}
-									<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
-								{/if}
-							</div>
-							<p class="text-gray-300">{(project.tasks || []).length} tasks • {(project.baseDirectories || []).length} directories</p>
-						</div>
-					</div>
-					
-					<div class="flex items-center gap-3">
-						<!-- View Toggle -->
-						<div class="flex bg-gray-800 rounded-lg p-1">
-							<button 
-								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'kanban' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'}"
-								on:click={() => viewMode = 'kanban'}
-							>
-								Kanban
-							</button>
-							<button 
-								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:text-white'}"
-								on:click={() => viewMode = 'list'}
-							>
-								List
-							</button>
-						</div>
-						
-						<button 
-							on:click={() => showCreateDirectoryForm = true}
-							class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-						>
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
-							</svg>
-							Add Directory
-						</button>
-						
-						<button 
-							on:click={() => {
-								showCreateTaskForm = true;
-								setDefaultBaseDirectory();
-							}}
-							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-						>
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-							</svg>
-							New Task
-						</button>
-						
-						<!-- Delete Project Button -->
-						<button 
-							on:click={deleteProject}
-							disabled={deletingProject}
-							class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-						>
-							{#if deletingProject}
-								<div class="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-							{:else}
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-								</svg>
-							{/if}
-							{deletingProject ? 'Deleting...' : 'Delete Project'}
-						</button>
-					</div>
-				</div>
-			{/if}
+<div class="space-y-6">
+	<!-- Breadcrumb -->
+	<Breadcrumb segments={breadcrumbSegments} />
+	
+	<!-- Header -->
+	{#if loading}
+		<div class="flex items-center justify-center min-h-64">
+			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
 		</div>
-
-		<!-- Create Task Form -->
-		{#if showCreateTaskForm}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Create New Task</h3>
-				<form on:submit|preventDefault={createTask} class="space-y-4">
-					<div>
-						<label for="task-title" class="block text-sm font-medium text-gray-300 mb-2">
-							Task Title
-						</label>
-						<input 
-							id="task-title"
-							type="text" 
-							bind:value={newTask.title}
-							placeholder="Enter task title"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-							required
-						/>
+	{:else if error}
+		<Card class="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
+			<div class="flex">
+				<svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<div class="ml-3">
+					<h3 class="text-sm font-medium text-red-800 dark:text-red-200">Error loading project</h3>
+					<div class="mt-2 text-sm text-red-700 dark:text-red-300">
+						<p>{error}</p>
 					</div>
-					<div>
-						<label for="task-description" class="block text-sm font-medium text-gray-300 mb-2">
-							Description
-						</label>
-						<textarea 
-							id="task-description"
-							bind:value={newTask.description}
-							placeholder="Enter task description"
-							rows="3"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-						></textarea>
-					</div>
-					<div>
-						<label for="task-base-directory" class="block text-sm font-medium text-gray-300 mb-2">
-							Base Directory
-						</label>
-						<select 
-							id="task-base-directory"
-							bind:value={newTask.baseDirectoryId}
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-							required
-						>
-							<option value="">Select a base directory...</option>
-							{#if project && project.baseDirectories}
-								{#each project.baseDirectories as directory}
-									<option value={directory.base_directory_id}>{directory.path}</option>
-								{/each}
-							{/if}
-						</select>
-					</div>
-					<div>
-						<label for="task-status" class="block text-sm font-medium text-gray-300 mb-2">
-							Initial Status
-						</label>
-						<select 
-							id="task-status"
-							bind:value={newTask.status}
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-						>
-							{#each columns as column}
-								<option value={column.id}>{column.title}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Create Task
-						</button>
-						<button 
-							type="button"
-							on:click={() => showCreateTaskForm = false}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
+				</div>
 			</div>
+		</Card>
+	{:else if project}
+		<Card>
+			<PageHeader 
+				title={project.name} 
+				subtitle="{(project.tasks || []).length} tasks • {(project.baseDirectories || []).length} directories"
+			>
+				<!-- View Toggle -->
+				<div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+					<button 
+						class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'kanban' ? 'bg-blue-500 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
+						on:click={() => viewMode = 'kanban'}
+					>
+						Kanban
+					</button>
+					<button 
+						class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
+						on:click={() => viewMode = 'list'}
+					>
+						List
+					</button>
+				</div>
+				
+				<Button 
+					variant="success"
+					onclick={() => showCreateDirectoryForm = true}
+				>
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+					</svg>
+					Add Directory
+				</Button>
+				
+				<Button 
+					variant="primary"
+					onclick={() => {
+						showCreateTaskForm = true;
+						setDefaultBaseDirectory();
+					}}
+				>
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+					</svg>
+					New Task
+				</Button>
+				
+				<Button 
+					variant="danger"
+					onclick={deleteProject}
+					disabled={deletingProject}
+					loading={deletingProject}
+				>
+					{#if !deletingProject}
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+						</svg>
+					{/if}
+					{deletingProject ? 'Deleting...' : 'Delete Project'}
+				</Button>
+			</PageHeader>
+		</Card>
+	{/if}
+
+		<!-- Create Task Modal -->
+		<Modal open={showCreateTaskForm} title="Create New Task" onClose={() => showCreateTaskForm = false}>
+		<form on:submit|preventDefault={createTask} class="space-y-6">
+		<FormField label="Task Title" id="task-title" required>
+		 <Input 
+		 id="task-title"
+		type="text" 
+		bind:value={newTask.title}
+		placeholder="Enter task title"
+		required
+		/>
+		</FormField>
+		
+		<FormField label="Description" id="task-description">
+		<Textarea 
+		id="task-description"
+		bind:value={newTask.description}
+		 placeholder="Enter task description"
+		 rows={3}
+		/>
+		</FormField>
+		
+		<FormField label="Base Directory" id="task-base-directory" required>
+		<Select 
+		id="task-base-directory"
+		bind:value={newTask.baseDirectoryId}
+		placeholder="Select a base directory..."
+		required
+		>
+		 {#if project && project.baseDirectories}
+		  {#each project.baseDirectories as directory}
+		  <option value={directory.base_directory_id}>{directory.path}</option>
+		{/each}
 		{/if}
+		</Select>
+		</FormField>
+		
+		<FormField label="Initial Status" id="task-status">
+		<Select 
+		id="task-status"
+		bind:value={newTask.status}
+		>
+		{#each columns as column}
+		<option value={column.id}>{column.title}</option>
+		{/each}
+		</Select>
+		</FormField>
+		
+		<div class="flex gap-3 pt-4">
+		<Button type="submit" variant="primary">
+		<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+		</svg>
+		Create Task
+		</Button>
+		<Button 
+		type="button"
+		variant="secondary"
+		onclick={() => showCreateTaskForm = false}
+		>
+		Cancel
+		</Button>
+		</div>
+		</form>
+		</Modal>
 
 		<!-- Create Directory Form -->
 		{#if showCreateDirectoryForm}
@@ -1212,8 +1197,6 @@
 				</div>
 			{/if}
 		{/if}
-	</div>
-</div>
 
 <!-- Task Detail Modal -->
 {#if showTaskModal && selectedTask}
@@ -1488,3 +1471,5 @@
 		</div>
 	</div>
 {/if}
+
+</div>
