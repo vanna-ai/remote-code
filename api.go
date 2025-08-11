@@ -860,10 +860,20 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 type DashboardStats struct {
-	ActiveSessions int `json:"active_sessions"`
-	Projects       int `json:"projects"`
-	TaskExecutions int `json:"task_executions"`
-	Agents         int `json:"agents"`
+	ActiveSessions           int                      `json:"active_sessions"`
+	Projects                 int                      `json:"projects"`
+	TaskExecutions           int                      `json:"task_executions"`
+	Agents                   int                      `json:"agents"`
+	GitChangesAwaitingReview []TaskExecutionSummary   `json:"git_changes_awaiting_review"`
+	AgentsWaitingForInput    []TaskExecutionSummary   `json:"agents_waiting_for_input"`
+}
+
+type TaskExecutionSummary struct {
+	ID       int64  `json:"id"`
+	TaskID   int64  `json:"task_id"`
+	TaskName string `json:"task_name"`
+	Agent    string `json:"agent"`
+	Status   string `json:"status"`
 }
 
 func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
@@ -889,10 +899,67 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				stats.Projects = len(projects)
 			}
 
-			// Count task executions
+			// Count task executions and populate special lists
 			executions, err := queries.ListTaskExecutions(ctx)
 			if err == nil {
 				stats.TaskExecutions = len(executions)
+				
+				// Check each execution for git changes awaiting review and waiting status
+				for _, execution := range executions {
+					// Get task details
+					task, taskErr := queries.GetTask(ctx, execution.TaskID)
+					if taskErr != nil {
+						continue
+					}
+					
+					// Get agent details
+					agent, agentErr := queries.GetAgent(ctx, execution.AgentID)
+					if agentErr != nil {
+						continue
+					}
+					
+					// Get worktree details for both status and git checks
+					worktree, worktreeErr := queries.GetWorktree(ctx, execution.WorktreeID)
+					if worktreeErr != nil {
+						continue
+					}
+					
+					summary := TaskExecutionSummary{
+						ID:       execution.ID,
+						TaskID:   execution.TaskID,
+						TaskName: task.Title,
+						Agent:    agent.Name,
+						Status:   execution.Status,
+					}
+					
+					// Check if agent is waiting for user input
+					// First check stored status
+					isWaiting := execution.Status == "Waiting" || execution.Status == "waiting"
+					
+					// If running, check real-time session status to detect waiting
+					if !isWaiting && (execution.Status == "running" || execution.Status == "Running") {
+						if worktree.AgentTmuxID.Valid {
+							realTimeStatus := determineTaskExecutionStatus(worktree.AgentTmuxID.String)
+							if realTimeStatus == "Waiting" {
+								isWaiting = true
+								summary.Status = "Waiting" // Update displayed status
+							}
+						}
+					}
+					
+					if isWaiting {
+						stats.AgentsWaitingForInput = append(stats.AgentsWaitingForInput, summary)
+					}
+					
+					// Check for git changes awaiting review (has uncommitted changes but running/completed)
+					gitStatus, _, _, gitErr := getGitStatus(worktree.Path)
+					if gitErr == nil && gitStatus != nil && gitStatus.IsDirty {
+						// Has git changes - check if it's completed or running
+						if execution.Status == "completed" || execution.Status == "running" {
+							stats.GitChangesAwaitingReview = append(stats.GitChangesAwaitingReview, summary)
+						}
+					}
+				}
 			}
 
 			// Count agents
