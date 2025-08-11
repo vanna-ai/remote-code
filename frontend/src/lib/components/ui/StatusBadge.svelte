@@ -62,6 +62,20 @@
 			dotColor: 'bg-gray-400',
 			solidColor: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 			outlineColor: 'border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-400'
+		},
+		waiting: {
+			label: 'Waiting',
+			color: 'yellow',
+			dotColor: 'bg-yellow-400',
+			solidColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+			outlineColor: 'border-yellow-300 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300'
+		},
+		starting: {
+			label: 'Starting',
+			color: 'blue',
+			dotColor: 'bg-blue-400',
+			solidColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+			outlineColor: 'border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300'
 		}
 	};
 
@@ -77,7 +91,7 @@
 		lg: 'w-2.5 h-2.5'
 	};
 
-	let config = $derived(statusConfig[status]);
+	let config = $derived(statusConfig[status] || statusConfig.pending);
 	let baseClasses = $derived(`inline-flex items-center gap-1.5 rounded-full font-medium ${sizeClasses[size]}`);
 	
 	let variantClasses = $derived({

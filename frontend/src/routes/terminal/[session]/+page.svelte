@@ -19,7 +19,7 @@
 
 	$: sessionId = $page.params.session;
 	$: breadcrumbSegments = [
-		{ label: "Remote-Code", href: "/", icon: "banner" },
+		{ label: "", href: "/", icon: "banner" },
 		{ label: "Terminal", href: "/terminal" },
 		{ label: sessionId || "Session", href: `/terminal/${sessionId}` }
 	];

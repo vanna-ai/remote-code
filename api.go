@@ -9,13 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-    "path/filepath"
+	"path/filepath"
+	"remote-code/db"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"remote-code/db"
-	
+
 	"github.com/robert-nix/ansihtml"
 )
 
@@ -24,786 +24,786 @@ import (
 // -----------------
 
 type GitFile struct {
-    Path    string `json:"path"`
-    X       string `json:"x"`     // Index status
-    Y       string `json:"y"`     // Worktree status
-    Staged  bool   `json:"staged"`
+	Path   string `json:"path"`
+	X      string `json:"x"` // Index status
+	Y      string `json:"y"` // Worktree status
+	Staged bool   `json:"staged"`
 }
 
 type GitStatus struct {
-    CurrentBranch  string    `json:"currentBranch"`
-    Upstream       string    `json:"upstream"`
-    Ahead          int       `json:"ahead"`
-    Behind         int       `json:"behind"`
-    IsDirty        bool      `json:"isDirty"`
-    StagedFiles    []GitFile `json:"stagedFiles"`
-    UnstagedFiles  []GitFile `json:"unstagedFiles"`
-    UntrackedFiles []GitFile `json:"untrackedFiles"`
-    MergeConflicts []GitFile `json:"mergeConflicts"`
+	CurrentBranch  string    `json:"currentBranch"`
+	Upstream       string    `json:"upstream"`
+	Ahead          int       `json:"ahead"`
+	Behind         int       `json:"behind"`
+	IsDirty        bool      `json:"isDirty"`
+	StagedFiles    []GitFile `json:"stagedFiles"`
+	UnstagedFiles  []GitFile `json:"unstagedFiles"`
+	UntrackedFiles []GitFile `json:"untrackedFiles"`
+	MergeConflicts []GitFile `json:"mergeConflicts"`
 }
 
 func runGit(dir string, args ...string) (string, int, error) {
-    cmd := exec.Command("git", args...)
-    cmd.Dir = dir
-    out, err := cmd.CombinedOutput()
-    if err != nil {
-        if exitErr, ok := err.(*exec.ExitError); ok {
-            return string(out), exitErr.ExitCode(), err
-        }
-        return string(out), -1, err
-    }
-    return string(out), 0, nil
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return string(out), exitErr.ExitCode(), err
+		}
+		return string(out), -1, err
+	}
+	return string(out), 0, nil
 }
 
 func parsePorcelainStatus(output string) (staged, unstaged, untracked, conflicts []GitFile) {
-    lines := strings.Split(output, "\x00")
-    for _, line := range lines {
-        if line == "" {
-            continue
-        }
+	lines := strings.Split(output, "\x00")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
 
-        // Porcelain -z format: XY<space>PATH (optionally with rename -> PATH\tPATH)
-        if len(line) < 3 {
-            continue
-        }
-        x := string(line[0])
-        y := string(line[1])
-        rest := strings.TrimSpace(line[2:])
-        path := rest
-        if strings.Contains(rest, "\t") {
-            parts := strings.SplitN(rest, "\t", 2)
-            path = parts[1] // show new path for renames
-        }
+		// Porcelain -z format: XY<space>PATH (optionally with rename -> PATH\tPATH)
+		if len(line) < 3 {
+			continue
+		}
+		x := string(line[0])
+		y := string(line[1])
+		rest := strings.TrimSpace(line[2:])
+		path := rest
+		if strings.Contains(rest, "\t") {
+			parts := strings.SplitN(rest, "\t", 2)
+			path = parts[1] // show new path for renames
+		}
 
-        gf := GitFile{Path: path, X: x, Y: y}
+		gf := GitFile{Path: path, X: x, Y: y}
 
-        // Untracked
-        if x == "?" && y == "?" {
-            untracked = append(untracked, gf)
-            continue
-        }
+		// Untracked
+		if x == "?" && y == "?" {
+			untracked = append(untracked, gf)
+			continue
+		}
 
-        // Conflicts: both modified or special states (e.g., UU, AA, DD)
-        if (x == "U" || y == "U") || (x == "A" && y == "A") || (x == "D" && y == "D") {
-            conflicts = append(conflicts, gf)
-            continue
-        }
+		// Conflicts: both modified or special states (e.g., UU, AA, DD)
+		if (x == "U" || y == "U") || (x == "A" && y == "A") || (x == "D" && y == "D") {
+			conflicts = append(conflicts, gf)
+			continue
+		}
 
-        // Staged if index has changes
-        if x != " " && x != "?" {
-            gf.Staged = true
-            staged = append(staged, gf)
-        }
+		// Staged if index has changes
+		if x != " " && x != "?" {
+			gf.Staged = true
+			staged = append(staged, gf)
+		}
 
-        // Unstaged if worktree has changes
-        if y != " " && y != "?" {
-            gf.Staged = false
-            unstaged = append(unstaged, gf)
-        }
-    }
-    return
+		// Unstaged if worktree has changes
+		if y != " " && y != "?" {
+			gf.Staged = false
+			unstaged = append(unstaged, gf)
+		}
+	}
+	return
 }
 
 func getGitStatus(dir string) (*GitStatus, int, string, error) {
-    // Branch and ahead/behind via -sb
-    short, _, err := runGit(dir, "status", "-sb")
-    if err != nil {
-        return nil, 1, short, err
-    }
+	// Branch and ahead/behind via -sb
+	short, _, err := runGit(dir, "status", "-sb")
+	if err != nil {
+		return nil, 1, short, err
+	}
 
-    // Files via porcelain -z
-    porcelain, _, err := runGit(dir, "status", "--porcelain=1", "-z")
-    if err != nil {
-        return nil, 1, porcelain, err
-    }
+	// Files via porcelain -z
+	porcelain, _, err := runGit(dir, "status", "--porcelain=1", "-z")
+	if err != nil {
+		return nil, 1, porcelain, err
+	}
 
-    status := &GitStatus{StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}}
+	status := &GitStatus{StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}}
 
-    // Parse branch line: e.g., "## main...origin/main [ahead 1]"
-    for _, line := range strings.Split(strings.TrimSpace(short), "\n") {
-        if strings.HasPrefix(line, "## ") {
-            meta := strings.TrimPrefix(line, "## ")
-            // Split branch...upstream and position info
-            parts := strings.Split(meta, "...")
-            status.CurrentBranch = strings.Split(parts[0], " ")[0]
-            if len(parts) > 1 {
-                rest := parts[1]
-                segs := strings.SplitN(rest, " ", 2)
-                status.Upstream = strings.TrimSpace(segs[0])
-                if len(segs) > 1 {
-                    pos := segs[1]
-                    if strings.Contains(pos, "ahead ") {
-                        fmt.Sscanf(pos, "[ahead %d]", &status.Ahead)
-                    }
-                    if strings.Contains(pos, "behind ") {
-                        // supports formats like [ahead 1, behind 2]
-                        fmt.Sscanf(pos, "[behind %d]", &status.Behind)
-                        var a, b int
-                        if strings.Contains(pos, "ahead ") && strings.Contains(pos, "behind ") {
-                            fmt.Sscanf(pos, "[ahead %d, behind %d]", &a, &b)
-                            status.Ahead = a
-                            status.Behind = b
-                        }
-                    }
-                }
-            }
-        }
-    }
+	// Parse branch line: e.g., "## main...origin/main [ahead 1]"
+	for _, line := range strings.Split(strings.TrimSpace(short), "\n") {
+		if strings.HasPrefix(line, "## ") {
+			meta := strings.TrimPrefix(line, "## ")
+			// Split branch...upstream and position info
+			parts := strings.Split(meta, "...")
+			status.CurrentBranch = strings.Split(parts[0], " ")[0]
+			if len(parts) > 1 {
+				rest := parts[1]
+				segs := strings.SplitN(rest, " ", 2)
+				status.Upstream = strings.TrimSpace(segs[0])
+				if len(segs) > 1 {
+					pos := segs[1]
+					if strings.Contains(pos, "ahead ") {
+						fmt.Sscanf(pos, "[ahead %d]", &status.Ahead)
+					}
+					if strings.Contains(pos, "behind ") {
+						// supports formats like [ahead 1, behind 2]
+						fmt.Sscanf(pos, "[behind %d]", &status.Behind)
+						var a, b int
+						if strings.Contains(pos, "ahead ") && strings.Contains(pos, "behind ") {
+							fmt.Sscanf(pos, "[ahead %d, behind %d]", &a, &b)
+							status.Ahead = a
+							status.Behind = b
+						}
+					}
+				}
+			}
+		}
+	}
 
-    staged, unstaged, untracked, conflicts := parsePorcelainStatus(porcelain)
-    status.StagedFiles = staged
-    status.UnstagedFiles = unstaged
-    status.UntrackedFiles = untracked
-    status.MergeConflicts = conflicts
-    status.IsDirty = len(staged) > 0 || len(unstaged) > 0 || len(untracked) > 0 || len(conflicts) > 0
+	staged, unstaged, untracked, conflicts := parsePorcelainStatus(porcelain)
+	status.StagedFiles = staged
+	status.UnstagedFiles = unstaged
+	status.UntrackedFiles = untracked
+	status.MergeConflicts = conflicts
+	status.IsDirty = len(staged) > 0 || len(unstaged) > 0 || len(untracked) > 0 || len(conflicts) > 0
 
-    return status, 0, "", nil
+	return status, 0, "", nil
 }
 
 func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-    if len(pathParts) == 0 {
-        json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid git endpoint"})
-        return
-    }
+	if len(pathParts) == 0 {
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid git endpoint"})
+		return
+	}
 
-    // For GET endpoints we accept ?path=...; for POST we read from JSON body.
-    // Each branch validates presence of path and returns JSON-form errors.
+	// For GET endpoints we accept ?path=...; for POST we read from JSON body.
+	// Each branch validates presence of path and returns JSON-form errors.
 
-    switch pathParts[0] {
-    case "status":
-        if r.Method != http.MethodGet {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        dir := r.URL.Query().Get("path")
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        st, code, stdout, err := getGitStatus(dir)
-        if err != nil && st == nil {
-            // Likely not a repo or other error
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "error":   err.Error(),
-                "code":    code,
-                "output":  stdout,
-            })
-            return
-        }
-        json.NewEncoder(w).Encode(st)
+	switch pathParts[0] {
+	case "status":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		dir := r.URL.Query().Get("path")
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		st, code, stdout, err := getGitStatus(dir)
+		if err != nil && st == nil {
+			// Likely not a repo or other error
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":  err.Error(),
+				"code":   code,
+				"output": stdout,
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(st)
 
-    case "diff":
-        if r.Method != http.MethodGet {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        dir := r.URL.Query().Get("path")
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        file := r.URL.Query().Get("file")
-        staged := r.URL.Query().Get("staged") == "true"
-        args := []string{"diff"}
-        if staged {
-            args = append(args, "--staged")
-        }
-        if file != "" {
-            args = append(args, "--", file)
-        }
-        out, _, err := runGit(dir, args...)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"diff": out})
+	case "diff":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		dir := r.URL.Query().Get("path")
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		file := r.URL.Query().Get("file")
+		staged := r.URL.Query().Get("staged") == "true"
+		args := []string{"diff"}
+		if staged {
+			args = append(args, "--staged")
+		}
+		if file != "" {
+			args = append(args, "--", file)
+		}
+		out, _, err := runGit(dir, args...)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"diff": out})
 
-    case "add":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path string `json:"path"`
-            File string `json:"file"`
-            All  bool   `json:"all"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
-            return
-        }
-        dir := body.Path
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        var args []string
-        if body.All {
-            args = []string{"add", "-A"}
-        } else if body.File != "" {
-            args = []string{"add", "--", body.File}
-        } else {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing file or all flag"})
-            return
-        }
-        out, _, err := runGit(dir, args...)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	case "add":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+			File string `json:"file"`
+			All  bool   `json:"all"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+			return
+		}
+		dir := body.Path
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		var args []string
+		if body.All {
+			args = []string{"add", "-A"}
+		} else if body.File != "" {
+			args = []string{"add", "--", body.File}
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing file or all flag"})
+			return
+		}
+		out, _, err := runGit(dir, args...)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 
-    case "unstage":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path string `json:"path"`
-            File string `json:"file"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.File == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires file"})
-            return
-        }
-        dir := body.Path
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        out, _, err := runGit(dir, "restore", "--staged", "--", body.File)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	case "unstage":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+			File string `json:"file"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.File == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires file"})
+			return
+		}
+		dir := body.Path
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		out, _, err := runGit(dir, "restore", "--staged", "--", body.File)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 
-    case "commit":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path    string `json:"path"`
-            Message string `json:"message"`
-            Amend   bool   `json:"amend"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires message"})
-            return
-        }
-        dir := body.Path
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        args := []string{"commit", "-m", body.Message}
-        if body.Amend {
-            args = append(args, "--amend")
-        }
-        out, code, err := runGit(dir, args...)
-        if err != nil {
-            // No changes to commit or other error
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "code": code, "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+	case "commit":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path    string `json:"path"`
+			Message string `json:"message"`
+			Amend   bool   `json:"amend"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires message"})
+			return
+		}
+		dir := body.Path
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		args := []string{"commit", "-m", body.Message}
+		if body.Amend {
+			args = append(args, "--amend")
+		}
+		out, code, err := runGit(dir, args...)
+		if err != nil {
+			// No changes to commit or other error
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "code": code, "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
 
-    case "merge":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path   string `json:"path"`
-            Branch string `json:"branch"`
-            TaskID int64  `json:"taskId"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
-            return
-        }
-        worktreeDir := body.Path
-        if worktreeDir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
+	case "merge":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+			TaskID int64  `json:"taskId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
+			return
+		}
+		worktreeDir := body.Path
+		if worktreeDir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
 
-        // Resolve base repository path from any worktree dir via git-common-dir
-        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
-            return
-        }
-        gitDir := strings.TrimSpace(commonDirOut)
-        basePath := filepath.Dir(gitDir)
+		// Resolve base repository path from any worktree dir via git-common-dir
+		commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
+			return
+		}
+		gitDir := strings.TrimSpace(commonDirOut)
+		basePath := filepath.Dir(gitDir)
 
-        // Step 1: Ensure we are on main
-        headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "check_branch",
-                "error":  "Failed to detect current branch",
-                "output": headOut,
-            })
-            return
-        }
-        currentBranch := strings.TrimSpace(headOut)
-        if currentBranch != "main" {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":    false,
-                "step":  "check_branch",
-                "error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
-            })
-            return
-        }
+		// Step 1: Ensure we are on main
+		headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "check_branch",
+				"error":  "Failed to detect current branch",
+				"output": headOut,
+			})
+			return
+		}
+		currentBranch := strings.TrimSpace(headOut)
+		if currentBranch != "main" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":    false,
+				"step":  "check_branch",
+				"error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
+			})
+			return
+		}
 
-        // Step 2: Ensure working tree is clean
-        statusOut, _, err := runGit(basePath, "status", "--porcelain")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "check_clean",
-                "error":  "Failed to check status",
-                "output": statusOut,
-            })
-            return
-        }
-        if strings.TrimSpace(statusOut) != "" {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "check_clean",
-                "error":  "Working tree not clean on main",
-                "output": statusOut,
-            })
-            return
-        }
+		// Step 2: Ensure working tree is clean
+		statusOut, _, err := runGit(basePath, "status", "--porcelain")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "check_clean",
+				"error":  "Failed to check status",
+				"output": statusOut,
+			})
+			return
+		}
+		if strings.TrimSpace(statusOut) != "" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "check_clean",
+				"error":  "Working tree not clean on main",
+				"output": statusOut,
+			})
+			return
+		}
 
-        // Step 3: Fetch origin
-        fetchOut, code, err := runGit(basePath, "fetch", "origin")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "fetch",
-                "code":   code,
-                "error":  "git fetch failed",
-                "output": fetchOut,
-            })
-            return
-        }
+		// Step 3: Fetch origin
+		fetchOut, code, err := runGit(basePath, "fetch", "origin")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "fetch",
+				"code":   code,
+				"error":  "git fetch failed",
+				"output": fetchOut,
+			})
+			return
+		}
 
-        // Step 4: Merge fast-forward only into main
-        mergeOut, code, err := runGit(basePath, "merge", "--ff-only", body.Branch)
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "merge",
-                "code":   code,
-                "error":  "git merge failed",
-                "output": mergeOut,
-            })
-            return
-        }
+		// Step 4: Merge fast-forward only into main
+		mergeOut, code, err := runGit(basePath, "merge", "--ff-only", body.Branch)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "merge",
+				"code":   code,
+				"error":  "git merge failed",
+				"output": mergeOut,
+			})
+			return
+		}
 
-        // Record ELO competition for the merged execution (winner) vs all other executions
-        eloStatus := "skipped"
-        if body.TaskID != 0 {
-            // Find the execution being merged by worktree path
-            if mergedExecution, err := queries.GetTaskExecutionByWorktreePath(ctx, worktreeDir); err == nil {
-                // Process ELO competitions with the merged execution as winner
-                eloCalc := NewELOCalculator(queries)
-                if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, mergedExecution.AgentID); err == nil {
-                    if result.TotalCompetitions > 0 {
-                        eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
-                    } else {
-                        eloStatus = "no competitions created"
-                    }
-                } else {
-                    eloStatus = fmt.Sprintf("elo error: %v", err)
-                }
-            } else {
-                eloStatus = fmt.Sprintf("execution not found: %v", err)
-            }
-        }
+		// Record ELO competition for the merged execution (winner) vs all other executions
+		eloStatus := "skipped"
+		if body.TaskID != 0 {
+			// Find the execution being merged by worktree path
+			if mergedExecution, err := queries.GetTaskExecutionByWorktreePath(ctx, worktreeDir); err == nil {
+				// Process ELO competitions with the merged execution as winner
+				eloCalc := NewELOCalculator(queries)
+				if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, mergedExecution.AgentID); err == nil {
+					if result.TotalCompetitions > 0 {
+						eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
+					} else {
+						eloStatus = "no competitions created"
+					}
+				} else {
+					eloStatus = fmt.Sprintf("elo error: %v", err)
+				}
+			} else {
+				eloStatus = fmt.Sprintf("execution not found: %v", err)
+			}
+		}
 
-        // Optionally update task status to done
-        taskStatus := "skipped"
-        if body.TaskID != 0 {
-            if task, err := queries.GetTask(ctx, body.TaskID); err == nil {
-                if _, err := queries.UpdateTask(ctx, db.UpdateTaskParams{ID: task.ID, Title: task.Title, Description: task.Description, Status: "done"}); err == nil {
-                    taskStatus = "updated"
-                } else {
-                    taskStatus = "failed"
-                }
-            } else {
-                taskStatus = "failed"
-            }
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{
-            "ok":          true,
-            "output":      mergeOut,
-            "taskStatus":  taskStatus,
-            "eloStatus":   eloStatus,
-        })
+		// Optionally update task status to done
+		taskStatus := "skipped"
+		if body.TaskID != 0 {
+			if task, err := queries.GetTask(ctx, body.TaskID); err == nil {
+				if _, err := queries.UpdateTask(ctx, db.UpdateTaskParams{ID: task.ID, Title: task.Title, Description: task.Description, Status: "done"}); err == nil {
+					taskStatus = "updated"
+				} else {
+					taskStatus = "failed"
+				}
+			} else {
+				taskStatus = "failed"
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":         true,
+			"output":     mergeOut,
+			"taskStatus": taskStatus,
+			"eloStatus":  eloStatus,
+		})
 
-    case "push":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path string `json:"path"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
-            return
-        }
-        worktreeDir := body.Path
-        if worktreeDir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
+	case "push":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+			return
+		}
+		worktreeDir := body.Path
+		if worktreeDir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
 
-        // Resolve base repository path
-        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
-            return
-        }
-        gitDir := strings.TrimSpace(commonDirOut)
-        basePath := filepath.Dir(gitDir)
+		// Resolve base repository path
+		commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
+			return
+		}
+		gitDir := strings.TrimSpace(commonDirOut)
+		basePath := filepath.Dir(gitDir)
 
-        // Ensure we are on main
-        headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "check_branch",
-                "error":  "Failed to detect current branch",
-                "output": headOut,
-            })
-            return
-        }
-        currentBranch := strings.TrimSpace(headOut)
-        if currentBranch != "main" {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":    false,
-                "step":  "check_branch",
-                "error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
-            })
-            return
-        }
+		// Ensure we are on main
+		headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "check_branch",
+				"error":  "Failed to detect current branch",
+				"output": headOut,
+			})
+			return
+		}
+		currentBranch := strings.TrimSpace(headOut)
+		if currentBranch != "main" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":    false,
+				"step":  "check_branch",
+				"error": fmt.Sprintf("Base repo not on main (on %s)", currentBranch),
+			})
+			return
+		}
 
-        // Ensure there is an upstream
-        upstreamOut, _, err := runGit(basePath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "check_upstream",
-                "error":  "No upstream configured for main",
-            })
-            return
-        }
-        _ = strings.TrimSpace(upstreamOut) // e.g., origin/main
+		// Ensure there is an upstream
+		upstreamOut, _, err := runGit(basePath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":    false,
+				"step":  "check_upstream",
+				"error": "No upstream configured for main",
+			})
+			return
+		}
+		_ = strings.TrimSpace(upstreamOut) // e.g., origin/main
 
-        // Push to upstream
-        pushOut, code, err := runGit(basePath, "push")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{
-                "ok":     false,
-                "step":   "push",
-                "code":   code,
-                "error":  "git push failed",
-                "output": pushOut,
-            })
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": pushOut})
+		// Push to upstream
+		pushOut, code, err := runGit(basePath, "push")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok":     false,
+				"step":   "push",
+				"code":   code,
+				"error":  "git push failed",
+				"output": pushOut,
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": pushOut})
 
-    case "merge-ready":
-        if r.Method != http.MethodGet {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        worktreeDir := r.URL.Query().Get("path")
-        if worktreeDir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        // Worktree must be clean
-        wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
-        if strings.TrimSpace(wtStatus) != "" {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Uncommitted changes in worktree"})
-            return
-        }
-        // Current worktree branch
-        curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot detect current branch"})
-            return
-        }
-        currentBranch := strings.TrimSpace(curBrOut)
-        if currentBranch == "" || currentBranch == "main" {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Already on main"})
-            return
-        }
-        // Resolve base repository path from any worktree dir via git-common-dir
-        commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Not a git repo"})
-            return
-        }
-        gitDir := strings.TrimSpace(commonDirOut)
-        basePath := filepath.Dir(gitDir)
-        // Base must be clean
-        baseStatus, _, _ := runGit(basePath, "status", "--porcelain")
-        if strings.TrimSpace(baseStatus) != "" {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Base repo has uncommitted changes"})
-            return
-        }
-        // SHAs for main and worktree HEAD
-        headSHA, _, err := runGit(worktreeDir, "rev-parse", "HEAD")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve worktree HEAD"})
-            return
-        }
-        branchSHA := strings.TrimSpace(headSHA)
-        mainOut, _, err := runGit(basePath, "rev-parse", "main")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve main"})
-            return
-        }
-        mainSHA := strings.TrimSpace(mainOut)
-        if branchSHA == mainSHA {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "No changes to merge"})
-            return
-        }
-        // Check fast-forward possibility: is main an ancestor of branch?
-        // Run in the worktree to avoid any ambiguity with refs; we pass SHAs.
-        _, code, _ := runGit(worktreeDir, "merge-base", "--is-ancestor", mainSHA, branchSHA)
-        if code != 0 {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Non fast-forward; rebase required"})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ready": true, "branch": currentBranch, "main": mainSHA, "head": branchSHA})
+	case "merge-ready":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		worktreeDir := r.URL.Query().Get("path")
+		if worktreeDir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		// Worktree must be clean
+		wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
+		if strings.TrimSpace(wtStatus) != "" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Uncommitted changes in worktree"})
+			return
+		}
+		// Current worktree branch
+		curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot detect current branch"})
+			return
+		}
+		currentBranch := strings.TrimSpace(curBrOut)
+		if currentBranch == "" || currentBranch == "main" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Already on main"})
+			return
+		}
+		// Resolve base repository path from any worktree dir via git-common-dir
+		commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Not a git repo"})
+			return
+		}
+		gitDir := strings.TrimSpace(commonDirOut)
+		basePath := filepath.Dir(gitDir)
+		// Base must be clean
+		baseStatus, _, _ := runGit(basePath, "status", "--porcelain")
+		if strings.TrimSpace(baseStatus) != "" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Base repo has uncommitted changes"})
+			return
+		}
+		// SHAs for main and worktree HEAD
+		headSHA, _, err := runGit(worktreeDir, "rev-parse", "HEAD")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve worktree HEAD"})
+			return
+		}
+		branchSHA := strings.TrimSpace(headSHA)
+		mainOut, _, err := runGit(basePath, "rev-parse", "main")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Cannot resolve main"})
+			return
+		}
+		mainSHA := strings.TrimSpace(mainOut)
+		if branchSHA == mainSHA {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "No changes to merge"})
+			return
+		}
+		// Check fast-forward possibility: is main an ancestor of branch?
+		// Run in the worktree to avoid any ambiguity with refs; we pass SHAs.
+		_, code, _ := runGit(worktreeDir, "merge-base", "--is-ancestor", mainSHA, branchSHA)
+		if code != 0 {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ready": false, "reason": "Non fast-forward; rebase required"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ready": true, "branch": currentBranch, "main": mainSHA, "head": branchSHA})
 
-    case "update-from-main":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path     string `json:"path"`
-            Strategy string `json:"strategy"` // "merge" (default) or "rebase"
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
-            return
-        }
-        worktreeDir := body.Path
-        if worktreeDir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        // Must be a git repo and clean
-        wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
-        if strings.TrimSpace(wtStatus) != "" {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_clean", "error": "Uncommitted changes in worktree"})
-            return
-        }
-        // Determine current branch and ensure not main
-        curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Cannot detect current branch"})
-            return
-        }
-        currentBranch := strings.TrimSpace(curBrOut)
-        if currentBranch == "" || currentBranch == "main" {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Already on main"})
-            return
-        }
-        // Fetch latest
-        if out, code, err := runGit(worktreeDir, "fetch", "origin"); err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "fetch", "code": code, "error": "git fetch failed", "output": out})
-            return
-        }
-        strategy := strings.ToLower(strings.TrimSpace(body.Strategy))
-        if strategy == "rebase" {
-            out, code, err := runGit(worktreeDir, "rebase", "origin/main")
-            if err != nil {
-                json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "rebase", "code": code, "error": "git rebase failed", "output": out})
-                return
-            }
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
-            return
-        }
-        // Default: merge origin/main into current branch (like GitHub Update branch)
-        out, code, err := runGit(worktreeDir, "merge", "origin/main")
-        if err != nil {
-            json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "merge", "code": code, "error": "git merge failed", "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+	case "update-from-main":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path     string `json:"path"`
+			Strategy string `json:"strategy"` // "merge" (default) or "rebase"
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+			return
+		}
+		worktreeDir := body.Path
+		if worktreeDir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		// Must be a git repo and clean
+		wtStatus, _, _ := runGit(worktreeDir, "status", "--porcelain")
+		if strings.TrimSpace(wtStatus) != "" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_clean", "error": "Uncommitted changes in worktree"})
+			return
+		}
+		// Determine current branch and ensure not main
+		curBrOut, _, err := runGit(worktreeDir, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Cannot detect current branch"})
+			return
+		}
+		currentBranch := strings.TrimSpace(curBrOut)
+		if currentBranch == "" || currentBranch == "main" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "check_branch", "error": "Already on main"})
+			return
+		}
+		// Fetch latest
+		if out, code, err := runGit(worktreeDir, "fetch", "origin"); err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "fetch", "code": code, "error": "git fetch failed", "output": out})
+			return
+		}
+		strategy := strings.ToLower(strings.TrimSpace(body.Strategy))
+		if strategy == "rebase" {
+			out, code, err := runGit(worktreeDir, "rebase", "origin/main")
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "rebase", "code": code, "error": "git rebase failed", "output": out})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
+			return
+		}
+		// Default: merge origin/main into current branch (like GitHub Update branch)
+		out, code, err := runGit(worktreeDir, "merge", "origin/main")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "step": "merge", "code": code, "error": "git merge failed", "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": out})
 
-    case "branches":
-        if r.Method != http.MethodGet {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        dir := r.URL.Query().Get("path")
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        includeRemotes := r.URL.Query().Get("includeRemotes") == "true"
-        out, _, err := runGit(dir, "branch", "--format", "%(refname:short)")
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list branches"})
-            return
-        }
-        var branches []string
-        for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-            if strings.TrimSpace(line) != "" {
-                branches = append(branches, strings.TrimSpace(line))
-            }
-        }
-        if includeRemotes {
-            outR, _, err := runGit(dir, "branch", "-r", "--format", "%(refname:short)")
-            if err == nil {
-                for _, line := range strings.Split(strings.TrimSpace(outR), "\n") {
-                    n := strings.TrimSpace(line)
-                    if n == "" {
-                        continue
-                    }
-                    if n == "origin/HEAD" { // skip symbolic default pointer
-                        continue
-                    }
-                    branches = append(branches, n)
-                }
-            }
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"branches": branches})
+	case "branches":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		dir := r.URL.Query().Get("path")
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		includeRemotes := r.URL.Query().Get("includeRemotes") == "true"
+		out, _, err := runGit(dir, "branch", "--format", "%(refname:short)")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list branches"})
+			return
+		}
+		var branches []string
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if strings.TrimSpace(line) != "" {
+				branches = append(branches, strings.TrimSpace(line))
+			}
+		}
+		if includeRemotes {
+			outR, _, err := runGit(dir, "branch", "-r", "--format", "%(refname:short)")
+			if err == nil {
+				for _, line := range strings.Split(strings.TrimSpace(outR), "\n") {
+					n := strings.TrimSpace(line)
+					if n == "" {
+						continue
+					}
+					if n == "origin/HEAD" { // skip symbolic default pointer
+						continue
+					}
+					branches = append(branches, n)
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"branches": branches})
 
-    case "checkout":
-        if r.Method != http.MethodPost {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        var body struct{
-            Path   string `json:"path"`
-            Branch string `json:"branch"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
-            return
-        }
-        dir := body.Path
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        out, _, err := runGit(dir, "checkout", body.Branch)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
-            return
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	case "checkout":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
+			return
+		}
+		dir := body.Path
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		out, _, err := runGit(dir, "checkout", body.Branch)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 
-    case "base-branch":
-        if r.Method != http.MethodGet {
-            w.WriteHeader(http.StatusMethodNotAllowed)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
-            return
-        }
-        dir := r.URL.Query().Get("path")
-        if dir == "" {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
-            return
-        }
-        // Resolve base repository path from any worktree dir via git-common-dir
-        commonDirOut, _, err := runGit(dir, "rev-parse", "--git-common-dir")
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
-            return
-        }
-        gitDir := strings.TrimSpace(commonDirOut)
-        basePath := filepath.Dir(gitDir)
-        // List worktrees in base repo and find the base worktree entry
-        wtOut, _, err := runGit(basePath, "worktree", "list", "--porcelain")
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list worktrees"})
-            return
-        }
-        var currentWT string
-        var baseBranch string
-        for _, line := range strings.Split(wtOut, "\n") {
-            if strings.HasPrefix(line, "worktree ") {
-                currentWT = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
-            } else if strings.HasPrefix(line, "branch ") && currentWT != "" {
-                br := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
-                br = strings.TrimPrefix(br, "refs/heads/")
-                if currentWT == basePath {
-                    baseBranch = br
-                    break
-                }
-            }
-        }
-        if baseBranch == "" {
-            // Fallback: try symbolic-ref on base path
-            ref, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
-            if err == nil {
-                baseBranch = strings.TrimSpace(ref)
-            }
-        }
-        json.NewEncoder(w).Encode(map[string]interface{}{"basePath": basePath, "branch": baseBranch})
+	case "base-branch":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		dir := r.URL.Query().Get("path")
+		if dir == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+			return
+		}
+		// Resolve base repository path from any worktree dir via git-common-dir
+		commonDirOut, _, err := runGit(dir, "rev-parse", "--git-common-dir")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
+			return
+		}
+		gitDir := strings.TrimSpace(commonDirOut)
+		basePath := filepath.Dir(gitDir)
+		// List worktrees in base repo and find the base worktree entry
+		wtOut, _, err := runGit(basePath, "worktree", "list", "--porcelain")
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to list worktrees"})
+			return
+		}
+		var currentWT string
+		var baseBranch string
+		for _, line := range strings.Split(wtOut, "\n") {
+			if strings.HasPrefix(line, "worktree ") {
+				currentWT = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+			} else if strings.HasPrefix(line, "branch ") && currentWT != "" {
+				br := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+				br = strings.TrimPrefix(br, "refs/heads/")
+				if currentWT == basePath {
+					baseBranch = br
+					break
+				}
+			}
+		}
+		if baseBranch == "" {
+			// Fallback: try symbolic-ref on base path
+			ref, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
+			if err == nil {
+				baseBranch = strings.TrimSpace(ref)
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"basePath": basePath, "branch": baseBranch})
 
-    default:
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]interface{}{"error": "Unknown git action"})
-    }
+	default:
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Unknown git action"})
+	}
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {
@@ -860,10 +860,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 type DashboardStats struct {
-	ActiveSessions   int `json:"active_sessions"`
-	Projects         int `json:"projects"`
-	TaskExecutions   int `json:"task_executions"`
-	Agents          int `json:"agents"`
+	ActiveSessions int `json:"active_sessions"`
+	Projects       int `json:"projects"`
+	TaskExecutions int `json:"task_executions"`
+	Agents         int `json:"agents"`
 }
 
 func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
@@ -872,7 +872,7 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 		if len(pathParts) > 0 && pathParts[0] == "stats" {
 			// Get dashboard statistics
 			stats := DashboardStats{}
-			
+
 			// Count active tmux sessions
 			cmd := exec.Command("tmux", "list-sessions")
 			output, err := cmd.Output()
@@ -882,25 +882,25 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 					stats.ActiveSessions = len(sessions)
 				}
 			}
-			
+
 			// Count projects
 			projects, err := queries.ListProjects(ctx)
 			if err == nil {
 				stats.Projects = len(projects)
 			}
-			
+
 			// Count task executions
 			executions, err := queries.ListTaskExecutions(ctx)
 			if err == nil {
 				stats.TaskExecutions = len(executions)
 			}
-			
+
 			// Count agents
 			agents, err := queries.ListAgents(ctx)
 			if err == nil {
 				stats.Agents = len(agents)
 			}
-			
+
 			json.NewEncoder(w).Encode(stats)
 		} else {
 			http.Error(w, "Unknown dashboard endpoint", http.StatusNotFound)
@@ -968,7 +968,7 @@ func handleRootsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 		json.NewEncoder(w).Encode(result)
 
 	default:
-	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -982,33 +982,34 @@ func handleTmuxSessionsAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 			http.Error(w, "Failed to get tmux sessions", http.StatusInternalServerError)
 			return
 		}
-		
+
 		json.NewEncoder(w).Encode(sessions)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 type TmuxSession struct {
-	Name      string `json:"name"`
-	Created   string `json:"created"`
-	Preview   string `json:"preview"`
-	TaskID    *int64 `json:"task_id,omitempty"`
-	TaskName  *string `json:"task_name,omitempty"`
-	AgentID   *int64 `json:"agent_id,omitempty"`
-	AgentName *string `json:"agent_name,omitempty"`
-	IsTask    bool   `json:"is_task"`
+	Name        string  `json:"name"`
+	Created     string  `json:"created"`
+	Preview     string  `json:"preview"`
+	TaskID      *int64  `json:"task_id,omitempty"`
+	TaskName    *string `json:"task_name,omitempty"`
+	AgentID     *int64  `json:"agent_id,omitempty"`
+	AgentName   *string `json:"agent_name,omitempty"`
+	ExecutionID *int64  `json:"execution_id,omitempty"`
+	IsTask      bool    `json:"is_task"`
 }
 
 // SessionState stores the state of a tmux session for comparison
 type SessionState struct {
-	Name            string    `json:"name"`
-	Content         string    `json:"content"`
-	LastCursorPos   string    `json:"last_cursor_pos"`
-	LastUpdated     time.Time `json:"last_updated"`
-	UnchangedSince  time.Time `json:"unchanged_since"`
-	IsWaiting       bool      `json:"is_waiting"`
+	Name           string    `json:"name"`
+	Content        string    `json:"content"`
+	LastCursorPos  string    `json:"last_cursor_pos"`
+	LastUpdated    time.Time `json:"last_updated"`
+	UnchangedSince time.Time `json:"unchanged_since"`
+	IsWaiting      bool      `json:"is_waiting"`
 }
 
 // Global storage for session states
@@ -1023,14 +1024,14 @@ func determineTaskExecutionStatus(sessionName string) string {
 	if sessionName == "" {
 		return "Running" // No session means not waiting
 	}
-	
+
 	// Capture current session state
 	currentState, err := captureSessionState(sessionName)
 	if err != nil {
 		// If we can't capture state, assume it's running (session might be ending, etc.)
 		return "Running"
 	}
-	
+
 	// Compare with previous state to determine if waiting
 	status := compareSessionStates(sessionName, currentState)
 	return status
@@ -1048,7 +1049,7 @@ func cleanupOrphanedSessionStates() {
 		sessionStatesMutex.Unlock()
 		return
 	}
-	
+
 	currentSessionNames := make(map[string]bool)
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	for _, line := range lines {
@@ -1056,7 +1057,7 @@ func cleanupOrphanedSessionStates() {
 			currentSessionNames[line] = true
 		}
 	}
-	
+
 	// Remove states for sessions that no longer exist
 	sessionStatesMutex.Lock()
 	for sessionName := range sessionStates {
@@ -1070,7 +1071,7 @@ func cleanupOrphanedSessionStates() {
 // captureSessionState captures the current state of a tmux session for comparison
 func captureSessionState(sessionName string) (*SessionState, error) {
 	now := time.Now()
-	
+
 	// Capture the session content
 	contentCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-e", "-p")
 	contentOutput, err := contentCmd.Output()
@@ -1078,7 +1079,7 @@ func captureSessionState(sessionName string) (*SessionState, error) {
 		return nil, fmt.Errorf("failed to capture session content: %v", err)
 	}
 	content := strings.TrimSpace(string(contentOutput))
-	
+
 	// Capture cursor position for more precise state detection
 	cursorCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{cursor_x},#{cursor_y}")
 	cursorOutput, err := cursorCmd.Output()
@@ -1086,14 +1087,14 @@ func captureSessionState(sessionName string) (*SessionState, error) {
 		return nil, fmt.Errorf("failed to capture cursor position: %v", err)
 	}
 	cursorPos := strings.TrimSpace(string(cursorOutput))
-	
+
 	return &SessionState{
-		Name:          sessionName,
-		Content:       content,
-		LastCursorPos: cursorPos,
-		LastUpdated:   now,
+		Name:           sessionName,
+		Content:        content,
+		LastCursorPos:  cursorPos,
+		LastUpdated:    now,
 		UnchangedSince: now, // Will be updated in compareSessionStates if unchanged
-		IsWaiting:     false,
+		IsWaiting:      false,
 	}, nil
 }
 
@@ -1101,19 +1102,19 @@ func captureSessionState(sessionName string) (*SessionState, error) {
 func compareSessionStates(sessionName string, currentState *SessionState) string {
 	sessionStatesMutex.Lock()
 	defer sessionStatesMutex.Unlock()
-	
+
 	previousState, exists := sessionStates[sessionName]
-	
+
 	// If no previous state exists, this is the first capture
 	if !exists {
 		sessionStates[sessionName] = currentState
 		return "Running"
 	}
-	
+
 	// Compare content and cursor position to detect changes
-	hasChanged := previousState.Content != currentState.Content || 
-		         previousState.LastCursorPos != currentState.LastCursorPos
-	
+	hasChanged := previousState.Content != currentState.Content ||
+		previousState.LastCursorPos != currentState.LastCursorPos
+
 	if hasChanged {
 		// Session has changed - reset waiting state
 		currentState.UnchangedSince = currentState.LastUpdated
@@ -1123,7 +1124,7 @@ func compareSessionStates(sessionName string, currentState *SessionState) string
 	} else {
 		// Session hasn't changed - preserve the unchanged timestamp
 		currentState.UnchangedSince = previousState.UnchangedSince
-		
+
 		// Check if it's been unchanged long enough to be considered waiting
 		timeSinceLastChange := currentState.LastUpdated.Sub(currentState.UnchangedSince)
 		if timeSinceLastChange >= WAITING_TIMEOUT {
@@ -1145,23 +1146,23 @@ func getTmuxSessions() ([]TmuxSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var sessions []TmuxSession
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	
+
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		
+
 		parts := strings.Split(line, "|")
 		if len(parts) != 2 {
 			continue
 		}
-		
+
 		sessionName := parts[0]
 		created := parts[1]
-		
+
 		// Get preview of the session with colors - capture more lines for scrollable view
 		preview := ""
 		previewCmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-e", "-p", "-S", "-20")
@@ -1170,13 +1171,13 @@ func getTmuxSessions() ([]TmuxSession, error) {
 			// Convert ANSI to HTML
 			preview = string(ansihtml.ConvertToHTML([]byte(rawPreview)))
 		}
-		
+
 		session := TmuxSession{
 			Name:    sessionName,
 			Created: created,
 			Preview: preview,
 		}
-		
+
 		// Check if this is a task session
 		if strings.HasPrefix(sessionName, "task_") {
 			session.IsTask = true
@@ -1196,13 +1197,27 @@ func getTmuxSessions() ([]TmuxSession, error) {
 					if agent, err := queries.GetAgent(context.Background(), agentID); err == nil {
 						session.AgentName = &agent.Name
 					}
+
+					// Look up execution ID for this task and agent combination
+					if session.TaskID != nil {
+						executions, err := queries.GetTaskExecutionsByTaskID(context.Background(), *session.TaskID)
+						if err == nil {
+							// Find the execution for this agent
+							for _, exec := range executions {
+								if exec.AgentID == agentID {
+									session.ExecutionID = &exec.ID
+									break
+								}
+							}
+						}
+					}
 				}
 			}
 		}
-		
+
 		sessions = append(sessions, session)
 	}
-	
+
 	return sessions, nil
 }
 
@@ -1212,13 +1227,13 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 		handleProjectTasksAPI(w, r, ctx, pathParts)
 		return
 	}
-	
+
 	// Handle base-directories sub-resource: /api/projects/{id}/base-directories
 	if len(pathParts) >= 2 && pathParts[1] == "base-directories" {
 		handleProjectBaseDirectoriesAPI(w, r, ctx, pathParts)
 		return
 	}
-	
+
 	switch r.Method {
 	case "GET":
 		if len(pathParts) == 0 {
@@ -1260,7 +1275,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 				if tasks == nil {
 					tasks = []Task{}
 				}
-				
+
 				project := Project{
 					ID:              dbProject.ID,
 					Name:            dbProject.Name,
@@ -1354,13 +1369,13 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 			http.Error(w, "Project ID required", http.StatusBadRequest)
 			return
 		}
-		
+
 		projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
 		if err != nil {
 			http.Error(w, "Invalid project ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Delete all tasks in this project first (which will also clean up task executions)
 		tasks, err := queries.GetTasksByProjectID(ctx, projectID)
 		if err == nil {
@@ -1376,7 +1391,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 						}
 					}
 				}
-				
+
 				// Delete the task
 				err = queries.DeleteTask(ctx, task.ID)
 				if err != nil {
@@ -1384,7 +1399,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 				}
 			}
 		}
-		
+
 		// Delete all base directories for this project
 		baseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
 		if err == nil {
@@ -1395,7 +1410,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 				}
 			}
 		}
-		
+
 		// Finally delete the project
 		err = queries.DeleteProject(ctx, projectID)
 		if err != nil {
@@ -1403,7 +1418,7 @@ func handleProjectsAPI(w http.ResponseWriter, r *http.Request, ctx context.Conte
 			http.Error(w, "Failed to delete project", http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -1418,7 +1433,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 		handleSingleAgentAPI(w, r, ctx, pathParts)
 		return
 	}
-	
+
 	switch r.Method {
 	case "GET":
 		if len(pathParts) > 0 && pathParts[0] == "detect" {
@@ -1426,7 +1441,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			handleAgentDetection(w, r, ctx)
 			return
 		}
-		
+
 		// List all agents for default root (assuming root_id = 1 for now)
 		dbAgents, err := queries.GetAgentsByRootID(ctx, 1)
 		if err != nil {
@@ -1434,7 +1449,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			json.NewEncoder(w).Encode([]Agent{})
 			return
 		}
-		
+
 		agents := make([]Agent, 0)
 		for _, dbAgent := range dbAgents {
 			agents = append(agents, Agent{
@@ -1444,9 +1459,9 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 				Params:  dbAgent.Params,
 			})
 		}
-		
+
 		json.NewEncoder(w).Encode(agents)
-		
+
 	case "POST":
 		// Create a new agent
 		var createReq struct {
@@ -1455,12 +1470,12 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			Command string `json:"command"`
 			Params  string `json:"params"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		agent, err := queries.CreateAgent(ctx, db.CreateAgentParams{
 			RootID:  createReq.RootId,
 			Name:    createReq.Name,
@@ -1472,7 +1487,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			http.Error(w, "Failed to create agent", http.StatusInternalServerError)
 			return
 		}
-		
+
 		result := Agent{
 			ID:      agent.ID,
 			Name:    agent.Name,
@@ -1480,7 +1495,7 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 			Params:  agent.Params,
 		}
 		json.NewEncoder(w).Encode(result)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -1489,13 +1504,13 @@ func handleAgentsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context
 func handleAgentDetection(w http.ResponseWriter, r *http.Request, ctx context.Context) {
 	// Define the agents to detect
 	agentsToDetect := []string{"claude", "amp", "codex", "gemini", "codebuff", "aider", "opencode", "friday", "grok"}
-	
+
 	var availableAgents []map[string]interface{}
-	
+
 	for _, agentName := range agentsToDetect {
 		cmd := exec.Command("which", agentName)
 		output, err := cmd.Output()
-		
+
 		if err == nil && len(output) > 0 {
 			// Agent is available
 			path := strings.TrimSpace(string(output))
@@ -1515,7 +1530,7 @@ func handleAgentDetection(w http.ResponseWriter, r *http.Request, ctx context.Co
 			})
 		}
 	}
-	
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"agents": availableAgents,
 	})
@@ -1526,13 +1541,13 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 		http.Error(w, "Agent ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	agentID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid agent ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	switch r.Method {
 	case "PUT":
 		// Update agent
@@ -1541,12 +1556,12 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 			Command string `json:"command"`
 			Params  string `json:"params"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		updatedAgent, err := queries.UpdateAgent(ctx, db.UpdateAgentParams{
 			ID:      agentID,
 			Name:    updateReq.Name,
@@ -1558,7 +1573,7 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 			http.Error(w, "Failed to update agent", http.StatusInternalServerError)
 			return
 		}
-		
+
 		result := Agent{
 			ID:      updatedAgent.ID,
 			Name:    updatedAgent.Name,
@@ -1566,7 +1581,7 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 			Params:  updatedAgent.Params,
 		}
 		json.NewEncoder(w).Encode(result)
-		
+
 	case "DELETE":
 		// Delete agent
 		err := queries.DeleteAgent(ctx, agentID)
@@ -1575,9 +1590,9 @@ func handleSingleAgentAPI(w http.ResponseWriter, r *http.Request, ctx context.Co
 			http.Error(w, "Failed to delete agent", http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNoContent)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -1589,13 +1604,13 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		handleSendInputToSession(w, r, ctx, pathParts)
 		return
 	}
-	
+
 	// Handle sub-endpoints like /api/task-executions/{id}/resend-task
 	if len(pathParts) >= 2 && pathParts[1] == "resend-task" {
 		handleResendTaskToSession(w, r, ctx, pathParts)
 		return
 	}
-	
+
 	switch r.Method {
 	case "DELETE":
 		// Handle task execution deletion
@@ -1605,20 +1620,20 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				http.Error(w, "Invalid execution ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			err = deleteTaskExecutionWithCleanup(ctx, executionID)
 			if err != nil {
 				log.Printf("Failed to delete task execution: %v", err)
 				http.Error(w, "Failed to delete task execution", http.StatusInternalServerError)
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		
+
 		http.Error(w, "Task execution ID required", http.StatusBadRequest)
-		
+
 	case "GET":
 		// Handle individual task execution by ID
 		if len(pathParts) > 0 {
@@ -1627,7 +1642,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				http.Error(w, "Invalid execution ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			queries := db.New(database)
 			execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
 			if err != nil {
@@ -1635,7 +1650,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				http.Error(w, "Task execution not found", http.StatusNotFound)
 				return
 			}
-			
+
 			// Update status based on tmux session waiting detection if it has an active session
 			if execution.AgentTmuxID.Valid {
 				sessionName := execution.AgentTmuxID.String
@@ -1644,11 +1659,11 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 					execution.Status = "Waiting"
 				}
 			}
-			
+
 			json.NewEncoder(w).Encode(execution)
 			return
 		}
-		
+
 		// Get task executions, optionally filtered by task_id
 		taskIDStr := r.URL.Query().Get("task_id")
 		if taskIDStr != "" {
@@ -1657,38 +1672,38 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				http.Error(w, "Invalid task ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			queries := db.New(database)
 			executions, err := queries.GetTaskExecutionsByTaskID(ctx, taskID)
 			if err != nil {
-			log.Printf("Failed to get task executions: %v", err)
-			http.Error(w, "Failed to get task executions", http.StatusInternalServerError)
-			return
+				log.Printf("Failed to get task executions: %v", err)
+				http.Error(w, "Failed to get task executions", http.StatusInternalServerError)
+				return
 			}
-			
+
 			// Ensure we return empty array instead of null
-		if executions == nil {
-			executions = []db.GetTaskExecutionsByTaskIDRow{}
-		}
-		
-		// Clean up orphaned session states periodically
-		cleanupOrphanedSessionStates()
-		
-		// Update status based on tmux session waiting detection
-		for i := range executions {
-			if executions[i].AgentTmuxID.Valid {
-				sessionName := executions[i].AgentTmuxID.String
-				waitingStatus := determineTaskExecutionStatus(sessionName)
-				if waitingStatus == "Waiting" {
-					executions[i].Status = "Waiting"
+			if executions == nil {
+				executions = []db.GetTaskExecutionsByTaskIDRow{}
+			}
+
+			// Clean up orphaned session states periodically
+			cleanupOrphanedSessionStates()
+
+			// Update status based on tmux session waiting detection
+			for i := range executions {
+				if executions[i].AgentTmuxID.Valid {
+					sessionName := executions[i].AgentTmuxID.String
+					waitingStatus := determineTaskExecutionStatus(sessionName)
+					if waitingStatus == "Waiting" {
+						executions[i].Status = "Waiting"
+					}
 				}
 			}
-		}
-		
-		json.NewEncoder(w).Encode(executions)
+
+			json.NewEncoder(w).Encode(executions)
 			return
 		}
-		
+
 		// Get all task executions
 		queries := db.New(database)
 		executions, err := queries.ListTaskExecutions(ctx)
@@ -1697,15 +1712,15 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			http.Error(w, "Failed to list task executions", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Ensure we return empty array instead of null
 		if executions == nil {
 			executions = []db.ListTaskExecutionsRow{}
 		}
-		
+
 		// Clean up orphaned session states periodically
 		cleanupOrphanedSessionStates()
-		
+
 		// Update status based on tmux session waiting detection
 		for i := range executions {
 			if executions[i].AgentTmuxID.Valid {
@@ -1716,21 +1731,21 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				}
 			}
 		}
-		
+
 		json.NewEncoder(w).Encode(executions)
-		
+
 	case "POST":
 		// Create and start a new task execution
 		var createReq struct {
 			TaskId  int64 `json:"task_id"`
 			AgentId int64 `json:"agent_id"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Get the task details
 		dbTask, err := queries.GetTask(ctx, createReq.TaskId)
 		if err != nil {
@@ -1738,7 +1753,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			http.Error(w, "Task not found", http.StatusNotFound)
 			return
 		}
-		
+
 		// Get the agent details
 		dbAgent, err := queries.GetAgent(ctx, createReq.AgentId)
 		if err != nil {
@@ -1746,10 +1761,10 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			http.Error(w, "Agent not found", http.StatusNotFound)
 			return
 		}
-		
+
 		// Create a unique worktree path for this execution
 		worktreePath := fmt.Sprintf("/tmp/task_%d_agent_%d_%d", createReq.TaskId, createReq.AgentId, time.Now().Unix())
-		
+
 		// Create the worktree
 		dbWorktree, err := queries.CreateWorktree(ctx, db.CreateWorktreeParams{
 			BaseDirectoryID: dbTask.BaseDirectoryID,
@@ -1763,7 +1778,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			http.Error(w, "Failed to create worktree", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Create the task execution record
 		dbTaskExecution, err := queries.CreateTaskExecution(ctx, db.CreateTaskExecutionParams{
 			TaskID:     createReq.TaskId,
@@ -1776,7 +1791,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			http.Error(w, "Failed to create task execution", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Update task status to "in_progress" if it's not already
 		if dbTask.Status != "in_progress" {
 			_, err = queries.UpdateTask(ctx, db.UpdateTaskParams{
@@ -1789,10 +1804,10 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 				log.Printf("Failed to update task status: %v", err)
 			}
 		}
-		
+
 		// Start the execution in the background
 		go startTaskExecutionProcess(dbTaskExecution.ID, dbTask, dbAgent, dbWorktree)
-		
+
 		// Return the task execution details
 		result := map[string]interface{}{
 			"id":          dbTaskExecution.ID,
@@ -1802,7 +1817,7 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			"status":      dbTaskExecution.Status,
 		}
 		json.NewEncoder(w).Encode(result)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -1810,9 +1825,9 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 
 func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, worktree db.Worktree) {
 	ctx := context.Background()
-	
+
 	log.Printf("Starting task execution %d: Task '%s' with agent '%s'", executionID, task.Title, agent.Name)
-	
+
 	// Get the base directory for setup commands
 	baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
 		ProjectID:       task.ProjectID,
@@ -1823,7 +1838,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}
-	
+
 	// Create the worktree directory
 	err = os.MkdirAll(worktree.Path, 0755)
 	if err != nil {
@@ -1831,10 +1846,10 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}
-	
+
 	// Generate a unique tmux session name
 	sessionName := fmt.Sprintf("task_%d_agent_%d", task.ID, agent.ID)
-	
+
 	// Start tmux session in the worktree directory
 	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktree.Path)
 	err = tmuxCmd.Run()
@@ -1843,7 +1858,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}
-	
+
 	// Update worktree with tmux session info
 	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
 		ID:              worktree.ID,
@@ -1855,7 +1870,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 	if err != nil {
 		log.Printf("Failed to update worktree with tmux session: %v", err)
 	}
-	
+
 	// Function to send command and wait
 	sendCommandAndWait := func(command string, description string) error {
 		log.Printf("Executing %s: %s", description, command)
@@ -1864,12 +1879,12 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		if err != nil {
 			return fmt.Errorf("failed to send %s command: %v", description, err)
 		}
-		
+
 		// Wait a moment for command to execute
 		time.Sleep(2 * time.Second)
 		return nil
 	}
-	
+
 	// Run git worktree setup if this is a git-initialized base directory
 	if baseDir.GitInitialized {
 		// Set up git worktree
@@ -1886,14 +1901,14 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 			log.Printf("Warning: %v", err)
 		}
 	}
-	
+
 	// Run custom worktree setup commands if provided
 	if baseDir.WorktreeSetupCommands != "" {
 		if err := sendCommandAndWait(baseDir.WorktreeSetupCommands, "worktree setup commands"); err != nil {
 			log.Printf("Warning: %v", err)
 		}
 	}
-	
+
 	// Start the agent command
 	agentCommand := fmt.Sprintf("%s %s", agent.Command, agent.Params)
 	if err := sendCommandAndWait(agentCommand, "agent command"); err != nil {
@@ -1901,20 +1916,20 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}
-	
+
 	// Update status to running
 	updateTaskExecutionStatus(ctx, executionID, "running")
-	
+
 	// Wait 3 seconds for the agent to start, then send the task title and description
 	go func() {
 		time.Sleep(3 * time.Second)
-		
+
 		// Create the task prompt to send to the agent
 		taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
-		
+
 		// Send the task prompt to the agent session with agent-specific handling
 		log.Printf("Sending initial task prompt to agent session: %s", taskPrompt)
-		
+
 		// Send the text first
 		cmd := exec.Command("tmux", "send-keys", "-t", sessionName, taskPrompt)
 		err := cmd.Run()
@@ -1922,7 +1937,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 			log.Printf("Warning: Failed to send task prompt: %v", err)
 			return
 		}
-		
+
 		// Small delay for agent debouncing, then send Enter
 		time.Sleep(100 * time.Millisecond)
 		enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
@@ -1931,7 +1946,7 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 			log.Printf("Warning: Failed to send Enter for task prompt: %v", err)
 		}
 	}()
-	
+
 	log.Printf("Task execution %d started successfully in tmux session %s", executionID, sessionName)
 }
 
@@ -1955,33 +1970,33 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	if len(pathParts) < 1 {
 		http.Error(w, "Task execution ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Parse the request body
 	var inputReq struct {
 		Input string `json:"input"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&inputReq); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	if inputReq.Input == "" {
 		http.Error(w, "Input cannot be empty", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get the task execution to find the tmux session
 	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
 	if err != nil {
@@ -1989,7 +2004,7 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 		http.Error(w, "Task execution not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Get the worktree to find the tmux session
 	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
 	if err != nil {
@@ -1997,17 +2012,17 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 		http.Error(w, "Worktree not found", http.StatusNotFound)
 		return
 	}
-	
+
 	if !worktree.AgentTmuxID.Valid {
 		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
 		return
 	}
-	
+
 	sessionName := worktree.AgentTmuxID.String
-	
+
 	// Send the input to the tmux session
 	log.Printf("Sending input to session %s: %s", sessionName, inputReq.Input)
-	
+
 	// Send the text first
 	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, inputReq.Input)
 	err = cmd.Run()
@@ -2016,7 +2031,7 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 		http.Error(w, "Failed to send input to session", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Small delay for agent debouncing, then send Enter
 	time.Sleep(100 * time.Millisecond)
 	enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
@@ -2026,7 +2041,7 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 		http.Error(w, "Failed to send Enter to session", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Return success response
 	response := map[string]interface{}{
 		"success": true,
@@ -2041,18 +2056,18 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	if len(pathParts) < 1 {
 		http.Error(w, "Task execution ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get the task execution to find the task details and tmux session
 	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
 	if err != nil {
@@ -2060,7 +2075,7 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Task execution not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Get the task details
 	task, err := queries.GetTask(ctx, execution.TaskID)
 	if err != nil {
@@ -2068,7 +2083,7 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// Get the worktree to find the tmux session
 	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
 	if err != nil {
@@ -2076,20 +2091,20 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Worktree not found", http.StatusNotFound)
 		return
 	}
-	
+
 	if !worktree.AgentTmuxID.Valid {
 		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
 		return
 	}
-	
+
 	sessionName := worktree.AgentTmuxID.String
-	
+
 	// Create the task prompt to send to the agent
 	taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
-	
+
 	// Send the task prompt to the tmux session
 	log.Printf("Re-sending task prompt to session %s", sessionName)
-	
+
 	// Send the text first
 	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, taskPrompt)
 	err = cmd.Run()
@@ -2098,7 +2113,7 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Failed to send task prompt to session", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Small delay for agent debouncing, then send Enter
 	time.Sleep(100 * time.Millisecond)
 	enterCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "Enter")
@@ -2108,13 +2123,13 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		http.Error(w, "Failed to send Enter to session", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Return success response
 	response := map[string]interface{}{
-		"success":     true,
-		"message":     "Task prompt re-sent to session successfully",
-		"session":     sessionName,
-		"task_title":  task.Title,
+		"success":          true,
+		"message":          "Task prompt re-sent to session successfully",
+		"session":          sessionName,
+		"task_title":       task.Title,
 		"task_description": task.Description,
 	}
 	json.NewEncoder(w).Encode(response)
@@ -2126,7 +2141,7 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 
 func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	queries := db.New(database)
-	
+
 	switch r.Method {
 	case "GET":
 		if len(pathParts) == 0 {
@@ -2139,17 +2154,17 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			worktree, err := queries.GetWorktree(ctx, worktreeID)
 			if err != nil {
 				log.Printf("Failed to get worktree: %v", err)
 				http.Error(w, "Worktree not found", http.StatusNotFound)
 				return
 			}
-			
+
 			json.NewEncoder(w).Encode(worktree)
 		}
-		
+
 	case "POST":
 		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
 		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
@@ -2158,7 +2173,7 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			// Start dev server for worktree
 			err = startDevServer(ctx, queries, worktreeID)
 			if err != nil {
@@ -2166,12 +2181,12 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				http.Error(w, "Failed to start dev server", http.StatusInternalServerError)
 				return
 			}
-			
+
 			json.NewEncoder(w).Encode(map[string]string{"status": "dev server started"})
 		} else {
 			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
 		}
-		
+
 	case "DELETE":
 		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
 		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
@@ -2180,7 +2195,7 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			// Stop dev server for worktree
 			err = stopDevServer(ctx, queries, worktreeID)
 			if err != nil {
@@ -2188,12 +2203,12 @@ func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				http.Error(w, "Failed to stop dev server", http.StatusInternalServerError)
 				return
 			}
-			
+
 			json.NewEncoder(w).Encode(map[string]string{"status": "dev server stopped"})
 		} else {
 			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
 		}
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -2204,14 +2219,14 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 	if err != nil {
 		return err
 	}
-	
+
 	// We need to get the task to find dev server setup commands
 	// First, let's get the task execution to find the task_id
 	executions, err := queries.ListTaskExecutions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list task executions: %v", err)
 	}
-	
+
 	var taskID int64
 	for _, exec := range executions {
 		if exec.WorktreeID == worktreeID {
@@ -2219,27 +2234,27 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 			break
 		}
 	}
-	
+
 	if taskID == 0 {
 		return fmt.Errorf("no task found for worktree %d", worktreeID)
 	}
-	
+
 	// Get task with base directory info to access dev server setup commands
 	taskWithBaseDir, err := queries.GetTaskWithBaseDirectory(ctx, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to get task with base directory: %v", err)
 	}
-	
+
 	// Create dev server session name
 	devSessionName := fmt.Sprintf("dev_%d", worktreeID)
-	
+
 	// Start tmux session for dev server in the worktree directory
 	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", devSessionName, "-c", worktree.Path)
 	err = tmuxCmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to create dev server tmux session: %v", err)
 	}
-	
+
 	// If there are dev server setup commands, execute them in the session
 	if taskWithBaseDir.DevServerSetupCommands != "" {
 		// Execute the dev server setup commands
@@ -2249,22 +2264,22 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 			log.Printf("Failed to send dev server setup commands: %v", err)
 			// Don't return error here, session is still created
 		}
-		
+
 		// Add a separator and info message
 		infoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "", "Enter")
 		infoCmd.Run()
-		
+
 		echoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "echo 'Dev server started. Session: "+devSessionName+"'", "Enter")
 		echoCmd.Run()
 	} else {
 		// No setup commands, just show info
 		echoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "echo 'Dev server session created. No setup commands configured.'", "Enter")
 		echoCmd.Run()
-		
+
 		bashCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "bash", "Enter")
 		bashCmd.Run()
 	}
-	
+
 	// Update worktree with dev server session info
 	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
 		ID:              worktree.ID,
@@ -2273,7 +2288,7 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 		DevServerTmuxID: sql.NullString{String: devSessionName, Valid: true},
 		ExternalUrl:     worktree.ExternalUrl,
 	})
-	
+
 	return err
 }
 
@@ -2282,13 +2297,13 @@ func stopDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) e
 	if err != nil {
 		return err
 	}
-	
+
 	if worktree.DevServerTmuxID.Valid {
 		// Kill the tmux session
 		tmuxCmd := exec.Command("tmux", "kill-session", "-t", worktree.DevServerTmuxID.String)
 		_ = tmuxCmd.Run() // Ignore error if session doesn't exist
 	}
-	
+
 	// Update worktree to remove dev server session info
 	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
 		ID:              worktree.ID,
@@ -2297,7 +2312,7 @@ func stopDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) e
 		DevServerTmuxID: sql.NullString{Valid: false},
 		ExternalUrl:     worktree.ExternalUrl,
 	})
-	
+
 	return err
 }
 
@@ -2311,42 +2326,42 @@ func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 				http.Error(w, "Invalid task ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			task, err := queries.GetTask(ctx, taskID)
 			if err != nil {
 				http.Error(w, "Task not found", http.StatusNotFound)
 				return
 			}
-			
+
 			json.NewEncoder(w).Encode(task)
 		} else {
 			// List all tasks - for now return empty array as we primarily use project tasks
 			json.NewEncoder(w).Encode([]db.Task{})
 		}
-		
+
 	case "PUT":
 		if len(pathParts) == 0 {
 			http.Error(w, "Task ID required", http.StatusBadRequest)
 			return
 		}
-		
+
 		taskID, err := strconv.ParseInt(pathParts[0], 10, 64)
 		if err != nil {
 			http.Error(w, "Invalid task ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		var updateReq struct {
 			Title       string `json:"title"`
 			Description string `json:"description"`
 			Status      string `json:"status"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		updatedTask, err := queries.UpdateTask(ctx, db.UpdateTaskParams{
 			ID:          taskID,
 			Title:       updateReq.Title,
@@ -2358,21 +2373,21 @@ func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 			http.Error(w, "Failed to update task", http.StatusInternalServerError)
 			return
 		}
-		
+
 		json.NewEncoder(w).Encode(updatedTask)
-		
+
 	case "DELETE":
 		if len(pathParts) == 0 {
 			http.Error(w, "Task ID required", http.StatusBadRequest)
 			return
 		}
-		
+
 		taskID, err := strconv.ParseInt(pathParts[0], 10, 64)
 		if err != nil {
 			http.Error(w, "Invalid task ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Check if there are any active task executions for this task
 		executions, err := queries.GetTaskExecutionsByTaskID(ctx, taskID)
 		if err == nil && len(executions) > 0 {
@@ -2384,7 +2399,7 @@ func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 				}
 			}
 		}
-		
+
 		// Delete the task
 		err = queries.DeleteTask(ctx, taskID)
 		if err != nil {
@@ -2392,9 +2407,9 @@ func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context,
 			http.Error(w, "Failed to delete task", http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNoContent)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -2405,18 +2420,18 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 		http.Error(w, "Project ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	switch r.Method {
 	case "GET":
 		// Get tasks for project - for now return empty array as tasks aren't fully implemented
 		json.NewEncoder(w).Encode([]Task{})
-		
+
 	case "POST":
 		// Create a new task for this project
 		var createReq struct {
@@ -2425,17 +2440,17 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 			Status          string `json:"status"`
 			BaseDirectoryId string `json:"baseDirectoryId"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		if createReq.BaseDirectoryId == "" {
 			http.Error(w, "Base directory ID is required", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Create the task (no worktree creation needed)
 		dbTask, err := queries.CreateTask(ctx, db.CreateTaskParams{
 			ProjectID:       projectID,
@@ -2449,14 +2464,14 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 			http.Error(w, "Failed to create task", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Get the base directory info to include in response
 		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
 		if err != nil {
 			http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
 			return
 		}
-		
+
 		var baseDirectory BaseDirectory
 		for _, dir := range dbBaseDirs {
 			if dir.BaseDirectoryID == createReq.BaseDirectoryId {
@@ -2464,11 +2479,11 @@ func handleProjectTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.C
 				break
 			}
 		}
-		
+
 		// Convert to API model
 		task := dbTaskToTask(dbTask, baseDirectory)
 		json.NewEncoder(w).Encode(task)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -2479,20 +2494,20 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 		http.Error(w, "Project ID required", http.StatusBadRequest)
 		return
 	}
-	
+
 	projectID, err := strconv.ParseInt(pathParts[0], 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Check if we have a specific directory ID in the path (for DELETE operations)
 	if len(pathParts) >= 3 {
 		directoryIDParam := pathParts[2]
 		handleSingleBaseDirectoryAPI(w, r, ctx, projectID, directoryIDParam)
 		return
 	}
-	
+
 	switch r.Method {
 	case "GET":
 		// Get base directories for project
@@ -2502,14 +2517,14 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 			json.NewEncoder(w).Encode([]BaseDirectory{})
 			return
 		}
-		
+
 		baseDirs := make([]BaseDirectory, 0)
 		for _, dbBaseDir := range dbBaseDirs {
 			baseDirs = append(baseDirs, dbBaseDirectoryToBaseDirectory(dbBaseDir))
 		}
-		
+
 		json.NewEncoder(w).Encode(baseDirs)
-		
+
 	case "POST":
 		// Create a new base directory for this project
 		var createReq struct {
@@ -2520,15 +2535,15 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 			DevServerSetupCommands    string `json:"devServerSetupCommands"`
 			DevServerTeardownCommands string `json:"devServerTeardownCommands"`
 		}
-		
+
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Generate a unique base directory ID
 		baseDirectoryID := fmt.Sprintf("bd_%d_%d", projectID, time.Now().Unix())
-		
+
 		dbBaseDir, err := queries.CreateBaseDirectory(ctx, db.CreateBaseDirectoryParams{
 			ProjectID:                 projectID,
 			BaseDirectoryID:           baseDirectoryID,
@@ -2543,10 +2558,10 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 			http.Error(w, "Failed to create base directory", http.StatusInternalServerError)
 			return
 		}
-		
+
 		result := dbBaseDirectoryToBaseDirectory(dbBaseDir)
 		json.NewEncoder(w).Encode(result)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -2557,13 +2572,13 @@ func loadTasksForProject(ctx context.Context, projectID int64, baseDirs []BaseDi
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create a map for fast base directory lookup
 	baseDirMap := make(map[string]BaseDirectory)
 	for _, dir := range baseDirs {
 		baseDirMap[dir.BaseDirectoryId] = dir
 	}
-	
+
 	var tasks []Task
 	for _, dbTask := range dbTasks {
 		baseDir, exists := baseDirMap[dbTask.BaseDirectoryID]
@@ -2573,63 +2588,63 @@ func loadTasksForProject(ctx context.Context, projectID int64, baseDirs []BaseDi
 		}
 		tasks = append(tasks, dbTaskToTask(dbTask, baseDir))
 	}
-	
+
 	return tasks, nil
 }
 
 func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, projectID int64, directoryIDParam string) {
-    switch r.Method {
-    case "PUT":
-        // Update an existing base directory identified by its external ID within a project
-        // First, fetch the existing directory to get its internal numeric ID
-        existing, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
-            ProjectID:       projectID,
-            BaseDirectoryID: directoryIDParam,
-        })
-        if err != nil {
-            http.Error(w, "Base directory not found", http.StatusNotFound)
-            return
-        }
-
-        // Parse update payload
-        var updateReq struct {
-            Path                      string `json:"path"`
-            GitInitialized            bool   `json:"gitInitialized"`
-            WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
-            WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
-            DevServerSetupCommands    string `json:"devServerSetupCommands"`
-            DevServerTeardownCommands string `json:"devServerTeardownCommands"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
-            http.Error(w, "Invalid JSON", http.StatusBadRequest)
-            return
-        }
-
-        updated, err := queries.UpdateBaseDirectory(ctx, db.UpdateBaseDirectoryParams{
-            ID:                        existing.ID,
-            Path:                      updateReq.Path,
-            GitInitialized:            updateReq.GitInitialized,
-            WorktreeSetupCommands:     updateReq.WorktreeSetupCommands,
-            WorktreeTeardownCommands:  updateReq.WorktreeTeardownCommands,
-            DevServerSetupCommands:    updateReq.DevServerSetupCommands,
-            DevServerTeardownCommands: updateReq.DevServerTeardownCommands,
-        })
-        if err != nil {
-            log.Printf("Failed to update base directory %d: %v", existing.ID, err)
-            http.Error(w, "Failed to update base directory", http.StatusInternalServerError)
-            return
-        }
-
-        json.NewEncoder(w).Encode(dbBaseDirectoryToBaseDirectory(updated))
-
-    case "DELETE":
-        // Find the directory by base_directory_id and project_id
-        dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
-        if err != nil {
-            http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
+	switch r.Method {
+	case "PUT":
+		// Update an existing base directory identified by its external ID within a project
+		// First, fetch the existing directory to get its internal numeric ID
+		existing, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+			ProjectID:       projectID,
+			BaseDirectoryID: directoryIDParam,
+		})
+		if err != nil {
+			http.Error(w, "Base directory not found", http.StatusNotFound)
 			return
 		}
-		
+
+		// Parse update payload
+		var updateReq struct {
+			Path                      string `json:"path"`
+			GitInitialized            bool   `json:"gitInitialized"`
+			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
+			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
+			DevServerSetupCommands    string `json:"devServerSetupCommands"`
+			DevServerTeardownCommands string `json:"devServerTeardownCommands"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		updated, err := queries.UpdateBaseDirectory(ctx, db.UpdateBaseDirectoryParams{
+			ID:                        existing.ID,
+			Path:                      updateReq.Path,
+			GitInitialized:            updateReq.GitInitialized,
+			WorktreeSetupCommands:     updateReq.WorktreeSetupCommands,
+			WorktreeTeardownCommands:  updateReq.WorktreeTeardownCommands,
+			DevServerSetupCommands:    updateReq.DevServerSetupCommands,
+			DevServerTeardownCommands: updateReq.DevServerTeardownCommands,
+		})
+		if err != nil {
+			log.Printf("Failed to update base directory %d: %v", existing.ID, err)
+			http.Error(w, "Failed to update base directory", http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(dbBaseDirectoryToBaseDirectory(updated))
+
+	case "DELETE":
+		// Find the directory by base_directory_id and project_id
+		dbBaseDirs, err := queries.GetBaseDirectoriesByProjectID(ctx, projectID)
+		if err != nil {
+			http.Error(w, "Failed to get base directories", http.StatusInternalServerError)
+			return
+		}
+
 		var directoryToDelete *db.BaseDirectory
 		for _, dir := range dbBaseDirs {
 			if dir.BaseDirectoryID == directoryIDParam {
@@ -2637,12 +2652,12 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 				break
 			}
 		}
-		
+
 		if directoryToDelete == nil {
 			http.Error(w, "Base directory not found", http.StatusNotFound)
 			return
 		}
-		
+
 		// Delete the directory
 		err = queries.DeleteBaseDirectory(ctx, directoryToDelete.ID)
 		if err != nil {
@@ -2650,9 +2665,9 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 			http.Error(w, "Failed to delete base directory", http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNoContent)
-		
+
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -2660,13 +2675,13 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 
 func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) error {
 	log.Printf("Starting cleanup for task execution %d", executionID)
-	
+
 	// Get task execution details with all related information
 	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
 	if err != nil {
 		return fmt.Errorf("failed to get task execution details: %v", err)
 	}
-	
+
 	// Get worktree details
 	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
 	if err != nil {
@@ -2678,7 +2693,7 @@ func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) erro
 		if err != nil {
 			log.Printf("Warning: failed to cleanup tmux sessions: %v", err)
 		}
-		
+
 		// Get task details to find project ID
 		task, err := queries.GetTask(ctx, execution.TaskID)
 		if err != nil {
@@ -2697,7 +2712,7 @@ func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) erro
 				if err != nil {
 					log.Printf("Warning: failed to run teardown commands: %v", err)
 				}
-				
+
 				// Cleanup filesystem
 				err = cleanupWorktreeDirectory(worktree, baseDir)
 				if err != nil {
@@ -2705,20 +2720,20 @@ func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) erro
 				}
 			}
 		}
-		
+
 		// Delete worktree record from database
 		err = queries.DeleteWorktree(ctx, worktree.ID)
 		if err != nil {
 			log.Printf("Warning: failed to delete worktree from database: %v", err)
 		}
 	}
-	
+
 	// Delete task execution record from database
 	err = queries.DeleteTaskExecution(ctx, executionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete task execution from database: %v", err)
 	}
-	
+
 	log.Printf("Successfully cleaned up task execution %d", executionID)
 	return nil
 }
@@ -2733,7 +2748,7 @@ func cleanupTmuxSessions(worktree db.Worktree) error {
 			log.Printf("Warning: failed to kill agent tmux session %s: %v", worktree.AgentTmuxID.String, err)
 		}
 	}
-	
+
 	// Kill dev server tmux session if it exists
 	if worktree.DevServerTmuxID.Valid && worktree.DevServerTmuxID.String != "" {
 		log.Printf("Killing dev server tmux session: %s", worktree.DevServerTmuxID.String)
@@ -2743,7 +2758,7 @@ func cleanupTmuxSessions(worktree db.Worktree) error {
 			log.Printf("Warning: failed to kill dev server tmux session %s: %v", worktree.DevServerTmuxID.String, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -2757,7 +2772,7 @@ func runTeardownCommands(worktree db.Worktree, baseDir db.BaseDirectory) error {
 			log.Printf("Warning: dev server teardown commands failed: %v, output: %s", err, string(output))
 		}
 	}
-	
+
 	// Run worktree teardown commands if they exist
 	if baseDir.WorktreeTeardownCommands != "" {
 		log.Printf("Running worktree teardown commands: %s", baseDir.WorktreeTeardownCommands)
@@ -2767,7 +2782,7 @@ func runTeardownCommands(worktree db.Worktree, baseDir db.BaseDirectory) error {
 			log.Printf("Warning: worktree teardown commands failed: %v, output: %s", err, string(output))
 		}
 	}
-	
+
 	return nil
 }
 
@@ -2775,7 +2790,7 @@ func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) er
 	// If this was a git worktree, remove it from git first
 	if baseDir.GitInitialized {
 		log.Printf("Removing git worktree: %s", worktree.Path)
-		
+
 		// Change to base directory and remove the git worktree
 		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && git worktree remove --force %s", baseDir.Path, worktree.Path))
 		output, err := cmd.CombinedOutput()
@@ -2783,14 +2798,14 @@ func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) er
 			log.Printf("Warning: failed to remove git worktree: %v, output: %s", err, string(output))
 		}
 	}
-	
+
 	// Remove the worktree directory from filesystem
 	log.Printf("Removing worktree directory: %s", worktree.Path)
 	err := os.RemoveAll(worktree.Path)
 	if err != nil {
 		return fmt.Errorf("failed to remove worktree directory %s: %v", worktree.Path, err)
 	}
-	
+
 	return nil
 }
 
@@ -2957,7 +2972,7 @@ func handleELOAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 				http.Error(w, "Invalid agent2 ID", http.StatusBadRequest)
 				return
 			}
-			
+
 			record, err := queries.GetHeadToHeadRecord(ctx, db.GetHeadToHeadRecordParams{
 				WinnerAgentID:   sql.NullInt64{Valid: true, Int64: agent1ID},
 				WinnerAgentID_2: sql.NullInt64{Valid: true, Int64: agent2ID},

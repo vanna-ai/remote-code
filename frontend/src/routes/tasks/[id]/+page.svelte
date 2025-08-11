@@ -9,7 +9,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	
 	$: breadcrumbSegments = [
-		{ label: "Remote-Code", href: "/", icon: "banner" },
+		{ label: "", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
 		{ label: execution?.project_name || "Project", href: execution?.project_id ? `/projects/${execution.project_id}` : "/projects" },
 		{ label: execution?.task_title ? (execution.task_title.length > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/tasks?task_id=${execution.task_id}` : "#" },
@@ -947,8 +947,8 @@
                             <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
                                 <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <Button variant="ghost" size="xs" onclick={() => viewDiff(f.path, true)}>Diff</Button>
-                                    <Button variant="ghost" size="xs" onclick={() => unstageFile(f.path)}>Unstage</Button>
+                                    <Button variant="secondary" size="xs" onclick={() => viewDiff(f.path, true)}>Diff</Button>
+                                    <Button variant="secondary" size="xs" onclick={() => unstageFile(f.path)}>Unstage</Button>
                                 </div>
                             </div>
                         {/each}
@@ -966,8 +966,8 @@
                             <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
                                 <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <Button variant="ghost" size="xs" onclick={() => viewDiff(f.path, false)}>Diff</Button>
-                                    <Button variant="ghost" size="xs" onclick={() => stageFile(f.path)}>Stage</Button>
+                                    <Button variant="secondary" size="xs" onclick={() => viewDiff(f.path, false)}>Diff</Button>
+                                    <Button variant="primary" size="xs" onclick={() => stageFile(f.path)}>Stage</Button>
                                 </div>
                             </div>
                         {/each}
@@ -985,7 +985,7 @@
                             <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
                                 <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
                                 <div class="flex items-center gap-2">
-                                    <Button variant="ghost" size="xs" onclick={() => stageFile(f.path)}>Add</Button>
+                                    <Button variant="primary" size="xs" onclick={() => stageFile(f.path)}>Add</Button>
                                 </div>
                             </div>
                         {/each}

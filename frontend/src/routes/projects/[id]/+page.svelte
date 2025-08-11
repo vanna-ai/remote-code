@@ -15,7 +15,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	
 	$: breadcrumbSegments = [
-		{ label: "Remote-Code", href: "/", icon: "banner" },
+		{ label: "", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
 		{ label: project?.name || "Loading...", href: `/projects/${$page.params.id}` }
 	];
@@ -597,90 +597,106 @@
 	<title>{project?.name || 'Project'} - Remote-Code</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<!-- Breadcrumb -->
-	<Breadcrumb segments={breadcrumbSegments} />
-	
-	<!-- Header -->
-	{#if loading}
-		<div class="flex items-center justify-center min-h-64">
-			<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-		</div>
-	{:else if error}
-		<Card class="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
-			<div class="flex">
-				<svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-				</svg>
-				<div class="ml-3">
-					<h3 class="text-sm font-medium text-red-800 dark:text-red-200">Error loading project</h3>
-					<div class="mt-2 text-sm text-red-700 dark:text-red-300">
-						<p>{error}</p>
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+	<div class="container mx-auto p-6 space-y-6">
+		<!-- Breadcrumb -->
+		<Breadcrumb segments={breadcrumbSegments} />
+		
+		<!-- Header -->
+		{#if loading}
+			<div class="flex items-center justify-center min-h-64">
+				<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+			</div>
+		{:else if error}
+			<Card class="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
+				<div class="flex">
+					<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					</svg>
+					<div class="ml-3">
+						<h3 class="text-sm font-medium text-red-800 dark:text-red-200">Error loading project</h3>
+						<div class="mt-2 text-sm text-red-700 dark:text-red-300">
+							<p>{error}</p>
+						</div>
+					</div>
+				</div>
+			</Card>
+		{:else if project}
+			<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+				<div class="flex items-center justify-between">
+					<div class="min-w-0 flex-1">
+						<div class="flex items-center gap-4 mb-2">
+							<div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+								<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+								</svg>
+							</div>
+							<div>
+								<h1 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+									{project.name}
+								</h1>
+								<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+									{(project.tasks || []).length} tasks • {(project.baseDirectories || []).length} directories
+								</p>
+							</div>
+						</div>
+					</div>
+					
+					<div class="flex items-center gap-3 ml-6">
+						<!-- View Toggle -->
+						<div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+							<button 
+								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'kanban' ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
+								on:click={() => viewMode = 'kanban'}
+							>
+								Kanban
+							</button>
+							<button 
+								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
+								on:click={() => viewMode = 'list'}
+							>
+								List
+							</button>
+						</div>
+						
+						<Button 
+							variant="success"
+							onclick={() => showCreateDirectoryForm = true}
+						>
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
+							</svg>
+							Add Directory
+						</Button>
+						
+						<Button 
+							variant="primary"
+							onclick={() => {
+								showCreateTaskForm = true;
+								setDefaultBaseDirectory();
+							}}
+						>
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+							</svg>
+							New Task
+						</Button>
+						
+						<Button 
+							variant="danger"
+							onclick={deleteProject}
+							disabled={deletingProject}
+							loading={deletingProject}
+						>
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+							</svg>
+							{deletingProject ? 'Deleting...' : 'Delete Project'}
+						</Button>
 					</div>
 				</div>
 			</div>
-		</Card>
-	{:else if project}
-		<Card>
-			<PageHeader 
-				title={project.name} 
-				subtitle="{(project.tasks || []).length} tasks • {(project.baseDirectories || []).length} directories"
-			>
-				<!-- View Toggle -->
-				<div class="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-					<button 
-						class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'kanban' ? 'bg-blue-500 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
-						on:click={() => viewMode = 'kanban'}
-					>
-						Kanban
-					</button>
-					<button 
-						class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'list' ? 'bg-blue-500 text-white' : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}"
-						on:click={() => viewMode = 'list'}
-					>
-						List
-					</button>
-				</div>
-				
-				<Button 
-					variant="success"
-					onclick={() => showCreateDirectoryForm = true}
-				>
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
-					</svg>
-					Add Directory
-				</Button>
-				
-				<Button 
-					variant="primary"
-					onclick={() => {
-						showCreateTaskForm = true;
-						setDefaultBaseDirectory();
-					}}
-				>
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-					</svg>
-					New Task
-				</Button>
-				
-				<Button 
-					variant="danger"
-					onclick={deleteProject}
-					disabled={deletingProject}
-					loading={deletingProject}
-				>
-					{#if !deletingProject}
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-						</svg>
-					{/if}
-					{deletingProject ? 'Deleting...' : 'Delete Project'}
-				</Button>
-			</PageHeader>
-		</Card>
-	{/if}
+		{/if}
 
 		<!-- Create Task Modal -->
 		<Modal open={showCreateTaskForm} title="Create New Task" onClose={() => showCreateTaskForm = false}>
@@ -749,114 +765,91 @@
 		</Modal>
 
 		<!-- Create Directory Form -->
-		{#if showCreateDirectoryForm}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-xl font-semibold text-white mb-4">Add Base Directory</h3>
-				<form on:submit|preventDefault={createDirectory} class="space-y-4">
-					<div>
-						<label for="directory-path" class="block text-sm font-medium text-gray-300 mb-2">
-							Directory Path
-						</label>
-						<input 
-							id="directory-path"
-							type="text" 
-							bind:value={newDirectory.path}
-							placeholder="/path/to/project/directory"
-							class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-							required
+		<Modal open={showCreateDirectoryForm} title="Add Base Directory" onClose={() => showCreateDirectoryForm = false}>
+			<form on:submit|preventDefault={createDirectory} class="space-y-6">
+				<FormField label="Directory Path" id="directory-path" required>
+					<Input 
+						id="directory-path"
+						type="text" 
+						bind:value={newDirectory.path}
+						placeholder="/path/to/project/directory"
+						required
+					/>
+				</FormField>
+				
+				<div class="flex items-center">
+					<input 
+						id="git-initialized"
+						type="checkbox" 
+						bind:checked={newDirectory.gitInitialized}
+						class="w-4 h-4 text-green-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-green-500 focus:ring-2"
+					/>
+					<label for="git-initialized" class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+						Git initialized
+					</label>
+				</div>
+				
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<FormField label="Worktree Setup Commands" id="worktree-setup">
+						<Textarea 
+							id="worktree-setup"
+							bind:value={newDirectory.worktreeSetupCommands}
+							placeholder="npm install"
+							rows={3}
 						/>
-					</div>
+					</FormField>
 					
-					<div class="flex items-center">
-						<input 
-							id="git-initialized"
-							type="checkbox" 
-							bind:checked={newDirectory.gitInitialized}
-							class="w-4 h-4 text-green-500 bg-gray-700 border-gray-600 rounded focus:ring-green-400 focus:ring-2"
+					<FormField label="Worktree Teardown Commands" id="worktree-teardown">
+						<Textarea 
+							id="worktree-teardown"
+							bind:value={newDirectory.worktreeTeardownCommands}
+							placeholder="npm run clean"
+							rows={3}
 						/>
-						<label for="git-initialized" class="ml-2 text-sm text-gray-300">
-							Git initialized
-						</label>
-					</div>
+					</FormField>
 					
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
-							<label for="worktree-setup" class="block text-sm font-medium text-gray-300 mb-2">
-								Worktree Setup Commands
-							</label>
-							<textarea 
-								id="worktree-setup"
-								bind:value={newDirectory.worktreeSetupCommands}
-								placeholder="npm install"
-								rows="3"
-								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-							></textarea>
-						</div>
-						
-						<div>
-							<label for="worktree-teardown" class="block text-sm font-medium text-gray-300 mb-2">
-								Worktree Teardown Commands
-							</label>
-							<textarea 
-								id="worktree-teardown"
-								bind:value={newDirectory.worktreeTeardownCommands}
-								placeholder="npm run clean"
-								rows="3"
-								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-							></textarea>
-						</div>
-						
-						<div>
-							<label for="dev-server-setup" class="block text-sm font-medium text-gray-300 mb-2">
-								Dev Server Setup Commands
-							</label>
-							<textarea 
-								id="dev-server-setup"
-								bind:value={newDirectory.devServerSetupCommands}
-								placeholder="npm run dev"
-								rows="3"
-								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-							></textarea>
-						</div>
-						
-						<div>
-							<label for="dev-server-teardown" class="block text-sm font-medium text-gray-300 mb-2">
-								Dev Server Teardown Commands
-							</label>
-							<textarea 
-								id="dev-server-teardown"
-								bind:value={newDirectory.devServerTeardownCommands}
-								placeholder="pkill -f 'npm run dev'"
-								rows="3"
-								class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-							></textarea>
-						</div>
-					</div>
+					<FormField label="Dev Server Setup Commands" id="dev-server-setup">
+						<Textarea 
+							id="dev-server-setup"
+							bind:value={newDirectory.devServerSetupCommands}
+							placeholder="npm run dev"
+							rows={3}
+						/>
+					</FormField>
 					
-					<div class="flex gap-3">
-						<button 
-							type="submit"
-							class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Add Directory
-						</button>
-						<button 
-							type="button"
-							on:click={() => showCreateDirectoryForm = false}
-							class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		{/if}
+					<FormField label="Dev Server Teardown Commands" id="dev-server-teardown">
+						<Textarea 
+							id="dev-server-teardown"
+							bind:value={newDirectory.devServerTeardownCommands}
+							placeholder="pkill -f 'npm run dev'"
+							rows={3}
+						/>
+					</FormField>
+				</div>
+				
+				<div class="flex gap-3 pt-4">
+					<Button type="submit" variant="success">
+						<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+						</svg>
+						Add Directory
+					</Button>
+					<Button 
+						type="button"
+						variant="secondary"
+						onclick={() => showCreateDirectoryForm = false}
+					>
+						Cancel
+					</Button>
+				</div>
+			</form>
+		</Modal>
 
 		<!-- Base Directories Section -->
 		{#if project && (project.baseDirectories || []).length > 0}
-			<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-				<h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-					<svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<Card>
+				<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+					<svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 					</svg>
 					Base Directories
@@ -864,45 +857,44 @@
 				
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					{#each project.baseDirectories as directory}
-						<div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+						<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
 							<div class="flex items-center justify-between mb-2">
 								<div class="flex items-center gap-2">
-									<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 									</svg>
-									<span class="font-mono text-sm text-green-300">{directory.path}</span>
+									<span class="font-mono text-sm text-green-700 dark:text-green-300 break-all">{directory.path}</span>
 									{#if directory.gitInitialized}
-										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+										<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300">
 											Git
 										</span>
 									{/if}
 								</div>
 								<div class="flex items-center gap-2">
-									<button 
-										on:click={() => startEditDirectory(directory)}
-										class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-1 transition-colors"
-										title="Edit directory"
-										aria-label="Edit directory"
+									<IconButton 
+										onclick={() => startEditDirectory(directory)}
+										variant="ghost"
+										size="sm"
 									>
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 										</svg>
-									</button>
-									<button 
-										on:click={() => deleteDirectory(directory.base_directory_id)}
-										class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors"
-										title="Delete directory"
-										aria-label="Delete directory"
+									</IconButton>
+									<IconButton 
+										onclick={() => deleteDirectory(directory.base_directory_id)}
+										variant="ghost"
+										size="sm"
+										class="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
 									>
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 										</svg>
-									</button>
+									</IconButton>
 								</div>
 							</div>
 							
 							{#if directory.worktreeSetupCommands || directory.devServerSetupCommands}
-								<div class="text-xs text-gray-400 space-y-1">
+								<div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
 									{#if directory.worktreeSetupCommands}
 										<div><strong>Setup:</strong> {directory.worktreeSetupCommands}</div>
 									{/if}
@@ -913,41 +905,60 @@
 							{/if}
 
 							{#if editingDirectoryId === directory.base_directory_id}
-								<div class="mt-3 space-y-3 border-t border-gray-600 pt-3">
-									<div>
-										<label class="block text-sm text-gray-300 mb-1">Path</label>
-										<input class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" bind:value={editDirectory.path} />
-									</div>
+								<div class="mt-3 space-y-3 border-t border-gray-200 dark:border-gray-600 pt-3">
+									<FormField label="Path" id={`path-${directory.base_directory_id}`}>
+										<Input 
+											id={`path-${directory.base_directory_id}`}
+											bind:value={editDirectory.path} 
+										/>
+									</FormField>
 									<div class="flex items-center gap-2">
-										<input id={`git-${directory.base_directory_id}`} type="checkbox" bind:checked={editDirectory.gitInitialized} class="accent-blue-500" />
-										<label for={`git-${directory.base_directory_id}`} class="text-sm text-gray-300">Git initialized</label>
+										<input 
+											id={`git-${directory.base_directory_id}`} 
+											type="checkbox" 
+											bind:checked={editDirectory.gitInitialized} 
+											class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2" 
+										/>
+										<label for={`git-${directory.base_directory_id}`} class="text-sm text-gray-700 dark:text-gray-300">Git initialized</label>
 									</div>
-									<div>
-										<label class="block text-sm text-gray-300 mb-1">Worktree Setup Commands</label>
-										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.worktreeSetupCommands}></textarea>
-									</div>
-									<div>
-										<label class="block text-sm text-gray-300 mb-1">Worktree Teardown Commands</label>
-										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.worktreeTeardownCommands}></textarea>
-									</div>
-									<div>
-										<label class="block text-sm text-gray-300 mb-1">Dev Server Setup Commands</label>
-										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.devServerSetupCommands}></textarea>
-									</div>
-									<div>
-										<label class="block text-sm text-gray-300 mb-1">Dev Server Teardown Commands</label>
-										<textarea class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" rows="2" bind:value={editDirectory.devServerTeardownCommands}></textarea>
-									</div>
+									<FormField label="Worktree Setup Commands" id={`setup-${directory.base_directory_id}`}>
+										<Textarea 
+											id={`setup-${directory.base_directory_id}`}
+											bind:value={editDirectory.worktreeSetupCommands}
+											rows={2}
+										/>
+									</FormField>
+									<FormField label="Worktree Teardown Commands" id={`teardown-${directory.base_directory_id}`}>
+										<Textarea 
+											id={`teardown-${directory.base_directory_id}`}
+											bind:value={editDirectory.worktreeTeardownCommands}
+											rows={2}
+										/>
+									</FormField>
+									<FormField label="Dev Server Setup Commands" id={`dev-setup-${directory.base_directory_id}`}>
+										<Textarea 
+											id={`dev-setup-${directory.base_directory_id}`}
+											bind:value={editDirectory.devServerSetupCommands}
+											rows={2}
+										/>
+									</FormField>
+									<FormField label="Dev Server Teardown Commands" id={`dev-teardown-${directory.base_directory_id}`}>
+										<Textarea 
+											id={`dev-teardown-${directory.base_directory_id}`}
+											bind:value={editDirectory.devServerTeardownCommands}
+											rows={2}
+										/>
+									</FormField>
 									<div class="flex gap-2">
-										<button class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded" on:click={saveEditDirectory}>Save</button>
-										<button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded" on:click={cancelEditDirectory}>Cancel</button>
+										<Button variant="primary" onclick={saveEditDirectory}>Save</Button>
+										<Button variant="secondary" onclick={cancelEditDirectory}>Cancel</Button>
 									</div>
 								</div>
 							{/if}
 						</div>
 					{/each}
 				</div>
-			</div>
+			</Card>
 		{/if}
 
 		<!-- Content -->
@@ -970,37 +981,37 @@
 				<!-- Kanban View -->
 				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 					{#each columns as column}
-						<div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+						<Card>
 							<div class="flex items-center gap-2 mb-4">
 								<div class="w-3 h-3 rounded-full {column.color}"></div>
-								<h3 class="font-semibold text-white">{column.title}</h3>
-								<span class="text-sm text-gray-400">({column.id === 'todo' ? todoTasks.length : column.id === 'in_progress' ? inProgressTasks.length : doneTasks.length})</span>
+								<h3 class="font-semibold text-gray-900 dark:text-white">{column.title}</h3>
+								<span class="text-sm text-gray-500 dark:text-gray-400">({column.id === 'todo' ? todoTasks.length : column.id === 'in_progress' ? inProgressTasks.length : doneTasks.length})</span>
 							</div>
 							
 							<div class="space-y-3">
 								{#each column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks as task}
 									<div 
-										class="bg-gray-700 rounded-lg p-3 border border-gray-600 hover:border-gray-500 hover:bg-gray-650 transition-colors group"
+										class="bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-md transition-all group"
 									>
 										<div class="flex items-start justify-between mb-1">
 											<h4 
-												class="font-medium text-white flex-1 cursor-pointer hover:text-blue-300 transition-colors" 
+												class="font-medium text-gray-900 dark:text-white flex-1 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors" 
 												on:click={() => selectTask(task)}
 											>
 												{task.title}
 											</h4>
 											<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
 												<!-- Edit Button -->
-												<button 
-													on:click|stopPropagation={() => openEditTaskModal(task)}
-													class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-1 transition-colors"
-													title="Edit task"
-													aria-label="Edit task"
+												<IconButton 
+													onclick={() => openEditTaskModal(task)}
+													variant="ghost"
+													size="xs"
+													class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
 												>
 													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 													</svg>
-												</button>
+												</IconButton>
 												
 												<!-- Status Change Dropdown -->
 												<div class="relative">
@@ -1008,7 +1019,7 @@
 														value={task.status}
 														on:change={(e) => updateTaskStatus(task, e.target.value)}
 														disabled={updatingTasks.has(task.id)}
-														class="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-xs text-white hover:bg-gray-500 transition-colors disabled:opacity-50"
+														class="bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded px-2 py-1 text-xs text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors disabled:opacity-50"
 														on:click|stopPropagation
 													>
 														{#each columns as col}
@@ -1018,11 +1029,12 @@
 												</div>
 												
 												<!-- Delete Button -->
-												<button 
-													on:click|stopPropagation={() => deleteTask(task)}
+												<IconButton 
+													onclick={() => deleteTask(task)}
 													disabled={deletingTasks.has(task.id)}
-													class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													title="Delete task"
+													variant="ghost"
+													size="xs"
+													class="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
 												>
 													{#if deletingTasks.has(task.id)}
 														<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
@@ -1031,13 +1043,13 @@
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 														</svg>
 													{/if}
-												</button>
+												</IconButton>
 											</div>
 										</div>
 										
 										<div class="cursor-pointer" on:click={() => selectTask(task)}>
 											{#if task.description}
-												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
+												<p class="text-sm text-gray-600 dark:text-gray-300 mb-2">{task.description}</p>
 											{/if}
 										
 										<!-- Task Executions -->
@@ -1047,7 +1059,7 @@
 													{#each taskExecutions.get(task.id) as execution}
 														<a 
 															href="/tasks/{execution.id}"
-															class="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-purple-100 px-2 py-1 rounded text-xs transition-colors"
+															class="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-600 hover:bg-purple-200 dark:hover:bg-purple-700 text-purple-800 dark:text-purple-100 px-2 py-1 rounded text-xs transition-colors"
 															on:click|stopPropagation
 														>
 															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1060,7 +1072,7 @@
 											</div>
 										{/if}
 										
-											<div class="text-xs text-gray-400 mt-2">
+											<div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
 												📁 {task.baseDirectory?.path || 'No base directory'}
 											</div>
 										</div>
@@ -1068,45 +1080,45 @@
 								{/each}
 								
 								{#if (column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks).length === 0}
-									<div class="text-center py-6 text-gray-500">
+									<EmptyState>
 										<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 										</svg>
 										<p class="text-sm">No tasks</p>
-									</div>
+									</EmptyState>
 								{/if}
 							</div>
-						</div>
+						</Card>
 					{/each}
 				</div>
 			{:else}
 				<!-- List View -->
-				<div class="bg-gray-800 rounded-lg border border-gray-700">
-					<div class="p-4 border-b border-gray-700">
-						<h3 class="text-lg font-semibold text-white">All Tasks</h3>
+				<Card>
+					<div class="p-4 border-b border-gray-200 dark:border-gray-700">
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tasks</h3>
 					</div>
 					
 					{#if (project.tasks || []).length === 0}
-						<div class="text-center py-12">
-							<div class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
+						<EmptyState>
+							<div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
 								<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
 							</div>
-							<h3 class="text-xl font-semibold text-gray-300 mb-2">No Tasks Yet</h3>
-							<p class="text-gray-400 mb-4">Create your first task to get started</p>
-						</div>
+							<h3 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">No Tasks Yet</h3>
+							<p class="text-gray-500 dark:text-gray-400 mb-4">Create your first task to get started</p>
+						</EmptyState>
 					{:else}
-						<div class="divide-y divide-gray-700">
+						<div class="divide-y divide-gray-200 dark:divide-gray-700">
 							{#each project.tasks || [] as task}
 								<div 
-									class="p-4 hover:bg-gray-750 transition-colors group"
+									class="p-4 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors group"
 								>
 									<div class="flex items-start justify-between">
 										<div class="flex-1 cursor-pointer" on:click={() => selectTask(task)}>
-											<h4 class="font-medium text-white mb-1">{task.title}</h4>
+											<h4 class="font-medium text-gray-900 dark:text-white mb-1">{task.title}</h4>
 											{#if task.description}
-												<p class="text-sm text-gray-300 mb-2">{task.description}</p>
+												<p class="text-sm text-gray-600 dark:text-gray-300 mb-2">{task.description}</p>
 											{/if}
 											
 											<!-- Task Executions -->
@@ -1116,7 +1128,7 @@
 														{#each taskExecutions.get(task.id) as execution}
 															<a 
 																href="/tasks/{execution.id}"
-																class="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-purple-100 px-2 py-1 rounded text-xs transition-colors"
+																class="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-600 hover:bg-purple-200 dark:hover:bg-purple-700 text-purple-800 dark:text-purple-100 px-2 py-1 rounded text-xs transition-colors"
 																on:click|stopPropagation
 															>
 																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1129,7 +1141,7 @@
 												</div>
 											{/if}
 											
-											<div class="text-xs text-gray-400 mt-1">
+											<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
 												📁 {task.baseDirectory?.path || 'No base directory'}
 											</div>
 										</div>
@@ -1138,33 +1150,30 @@
 											<!-- Status Badge -->
 											{#each columns as column}
 												{#if column.id === task.status}
-													<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
-														<div class="w-2 h-2 rounded-full {column.color}"></div>
-														{column.title}
-													</span>
+													<StatusBadge status={task.status || 'pending'} size="sm" />
 												{/if}
 											{/each}
 											
 											<!-- Task Management Buttons (hidden by default, shown on hover) -->
 											<div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
 												<!-- Edit Button -->
-												<button 
-													on:click|stopPropagation={() => openEditTaskModal(task)}
-													class="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded p-2 transition-colors"
-													title="Edit task"
-													aria-label="Edit task"
+												<IconButton 
+													onclick={() => openEditTaskModal(task)}
+													variant="ghost"
+													size="sm"
+													class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
 												>
 													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 													</svg>
-												</button>
+												</IconButton>
 												
 												<!-- Status Change Dropdown -->
 												<select 
 													value={task.status}
 													on:change={(e) => updateTaskStatus(task, e.target.value)}
 													disabled={updatingTasks.has(task.id)}
-													class="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-xs text-white hover:bg-gray-500 transition-colors disabled:opacity-50"
+													class="bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded px-2 py-1 text-xs text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors disabled:opacity-50"
 													on:click|stopPropagation
 												>
 													{#each columns as col}
@@ -1173,11 +1182,12 @@
 												</select>
 												
 												<!-- Delete Button -->
-												<button 
-													on:click|stopPropagation={() => deleteTask(task)}
+												<IconButton 
+													onclick={() => deleteTask(task)}
 													disabled={deletingTasks.has(task.id)}
-													class="text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-													title="Delete task"
+													variant="ghost"
+													size="sm"
+													class="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
 												>
 													{#if deletingTasks.has(task.id)}
 														<div class="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
@@ -1186,7 +1196,7 @@
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 														</svg>
 													{/if}
-												</button>
+												</IconButton>
 											</div>
 										</div>
 									</div>
@@ -1194,66 +1204,47 @@
 							{/each}
 						</div>
 					{/if}
-				</div>
+				</Card>
 			{/if}
 		{/if}
+	</div>
+</div>
 
 <!-- Task Detail Modal -->
-{#if showTaskModal && selectedTask}
-	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeTaskModal}>
-		<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4" on:click|stopPropagation>
-			<div class="flex items-center justify-between mb-4">
-				<h2 class="text-xl font-semibold text-white">Task Details</h2>
-				<button 
-					on:click={closeTaskModal}
-					class="text-gray-400 hover:text-white transition-colors"
-					aria-label="Close modal"
-				>
-					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-					</svg>
-				</button>
-			</div>
-			
-			<div class="space-y-4">
+<Modal open={showTaskModal && selectedTask} title="Task Details" size="xl" onClose={closeTaskModal}>
+	{#if selectedTask}
+		<div class="space-y-4">
 				<div>
-					<h3 class="text-lg font-medium text-white mb-2">{selectedTask.title}</h3>
+					<h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{selectedTask.title}</h3>
 					<div class="flex items-center gap-2 mb-3">
-						{#each columns as column}
-							{#if column.id === selectedTask.status}
-								<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
-									<div class="w-2 h-2 rounded-full {column.color}"></div>
-									{column.title}
-								</span>
-							{/if}
-						{/each}
+						<StatusBadge status={selectedTask.status || 'pending'} />
 					</div>
 				</div>
 				
 				{#if selectedTask.description}
 					<div>
-						<h4 class="text-sm font-medium text-gray-300 mb-2">Description</h4>
-						<p class="text-gray-400">{selectedTask.description}</p>
+						<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</h4>
+						<p class="text-gray-600 dark:text-gray-400">{selectedTask.description}</p>
 					</div>
 				{/if}
 				
 				<div>
-					<h4 class="text-sm font-medium text-gray-300 mb-2">Base Directory</h4>
-					<div class="bg-gray-700 rounded-lg p-3 border border-gray-600">
+					<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Base Directory</h4>
+					<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
 						<div class="flex items-center gap-2 mb-2">
-							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 							</svg>
-							<span class="font-mono text-sm text-green-300">{selectedTask.baseDirectory?.path || 'No path'}</span>
+							<span class="font-mono text-sm text-green-700 dark:text-green-300">{selectedTask.baseDirectory?.path || 'No path'}</span>
 							{#if selectedTask.baseDirectory?.git_initialized}
-								<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+								<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300">
 									Git
 								</span>
 							{/if}
 						</div>
 						
 						{#if selectedTask.baseDirectory?.worktree_setup_commands || selectedTask.baseDirectory?.dev_server_setup_commands}
-							<div class="text-xs text-gray-400 space-y-1">
+							<div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
 								{#if selectedTask.baseDirectory?.worktree_setup_commands}
 									<div><strong>Setup:</strong> {selectedTask.baseDirectory.worktree_setup_commands}</div>
 								{/if}
@@ -1268,28 +1259,27 @@
 				<!-- Active Executions -->
 				{#if taskExecutions.has(selectedTask.id) && taskExecutions.get(selectedTask.id).length > 0}
 					<div>
-						<h4 class="text-sm font-medium text-gray-300 mb-3">Active Executions</h4>
+						<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Active Executions</h4>
 						<div class="space-y-2">
 							{#each taskExecutions.get(selectedTask.id) as execution}
-								<div class="bg-gray-700 rounded-lg p-3 border border-yellow-600">
+								<div class="bg-yellow-50 dark:bg-gray-700 rounded-lg p-3 border border-yellow-200 dark:border-yellow-600">
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-2">
-											<svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
 											</svg>
-											<span class="text-white font-medium">{execution.agent_name}</span>
-											<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-600 text-yellow-100">
-												{execution.status}
-											</span>
+											<span class="text-gray-900 dark:text-white font-medium">{execution.agent_name}</span>
+											<StatusBadge status={execution.status || 'pending'} size="sm" />
 										</div>
-										<a 
+										<Button 
 											href="/tasks/{execution.id}"
-											class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-xs transition-colors"
+											variant="primary"
+											size="xs"
 										>
 											View Execution
-										</a>
+										</Button>
 									</div>
-									<div class="text-xs text-gray-400 mt-2">
+									<div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
 										Started: {new Date(execution.created_at.Time).toLocaleString()}
 									</div>
 								</div>
@@ -1298,178 +1288,137 @@
 					</div>
 				{/if}
 				
-				<div class="pt-4 border-t border-gray-700">
-					<h4 class="text-sm font-medium text-gray-300 mb-3">Execute Task</h4>
+				<div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+					<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Execute Task</h4>
 					
 					{#if availableAgents.length > 0}
-						<div class="bg-gray-700 rounded-lg p-4">
-							<p class="text-gray-400 mb-3">Select agents to execute this task:</p>
+						<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+							<p class="text-gray-600 dark:text-gray-400 mb-3">Select agents to execute this task:</p>
 							
 							<div class="space-y-2 mb-4 max-h-40 overflow-y-auto">
 								{#each availableAgents as agent}
-									<label class="flex items-center gap-3 p-2 rounded hover:bg-gray-600 cursor-pointer">
+									<label class="flex items-center gap-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
 										<input 
 											type="checkbox"
 											checked={selectedAgents.some(a => a.id === agent.id)}
 											on:change={() => toggleAgentSelection(agent)}
-											class="w-4 h-4 text-blue-500 bg-gray-600 border-gray-500 rounded focus:ring-blue-400 focus:ring-2"
+											class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-blue-500 focus:ring-2"
 										/>
 										<div class="flex-1">
-											<div class="font-medium text-white">{agent.name}</div>
-											<div class="text-sm text-gray-400 font-mono">{agent.command} {agent.params}</div>
+											<div class="font-medium text-gray-900 dark:text-white">{agent.name}</div>
+											<div class="text-sm text-gray-500 dark:text-gray-400 font-mono">{agent.command} {agent.params}</div>
 										</div>
 									</label>
 								{/each}
 							</div>
 							
 							{#if selectedAgents.length > 0}
-								<div class="text-sm text-gray-400 mb-3">
+								<div class="text-sm text-gray-600 dark:text-gray-400 mb-3">
 									Selected: {selectedAgents.map(a => a.name).join(', ')}
 								</div>
 							{/if}
 							
-							<button 
-								on:click={startTaskExecution}
+							<Button 
+								onclick={startTaskExecution}
 								disabled={selectedAgents.length === 0 || executingTask}
-								class="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+								loading={executingTask}
+								variant="primary"
+								class="w-full"
 							>
-								{#if executingTask}
-									<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-									Starting Execution...
-								{:else}
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h1m4 0h1m-2-4h.01M12 16h.01M12 8h.01M12 12h.01"/>
-									</svg>
-									Start Execution ({selectedAgents.length})
-								{/if}
-							</button>
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h1m4 0h1m-2-4h.01M12 16h.01M12 8h.01M12 12h.01"/>
+								</svg>
+								{executingTask ? 'Starting Execution...' : `Start Execution (${selectedAgents.length})`}
+							</Button>
 						</div>
 					{:else}
-						<div class="bg-gray-700 rounded-lg p-4 text-center">
-							<p class="text-gray-400 mb-3">No agents configured</p>
-							<a 
+						<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+							<p class="text-gray-600 dark:text-gray-400 mb-3">No agents configured</p>
+							<Button 
 								href="/agents"
-								class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
+								variant="warning"
 							>
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 								</svg>
 								Configure Agents
-							</a>
+							</Button>
 						</div>
 					{/if}
 				</div>
-			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+</Modal>
 
 <!-- Task Edit Modal -->
-{#if showEditTaskModal && editingTask}
-	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeEditTaskModal}>
-		<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-2xl w-full mx-4" on:click|stopPropagation>
-			<div class="flex items-center justify-between mb-4">
-				<h2 class="text-xl font-semibold text-white">Edit Task</h2>
-				<button 
-					on:click={closeEditTaskModal}
-					class="text-gray-400 hover:text-white transition-colors"
-					aria-label="Close modal"
-				>
-					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-					</svg>
-				</button>
-			</div>
+<Modal open={showEditTaskModal && editingTask} title="Edit Task" size="lg" onClose={closeEditTaskModal}>
+	{#if editingTask}
+		<form on:submit|preventDefault={saveTaskEdit} class="space-y-6">
+			<FormField label="Task Title" id="edit-task-title" required>
+				<Input 
+					id="edit-task-title"
+					type="text" 
+					bind:value={editTaskForm.title}
+					placeholder="Enter task title"
+					required
+				/>
+			</FormField>
 			
-			<form on:submit|preventDefault={saveTaskEdit} class="space-y-4">
-				<div>
-					<label for="edit-task-title" class="block text-sm font-medium text-gray-300 mb-2">
-						Task Title
-					</label>
-					<input 
-						id="edit-task-title"
-						type="text" 
-						bind:value={editTaskForm.title}
-						placeholder="Enter task title"
-						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-						required
-					/>
-				</div>
-				
-				<div>
-					<label for="edit-task-description" class="block text-sm font-medium text-gray-300 mb-2">
-						Description
-					</label>
-					<textarea 
-						id="edit-task-description"
-						bind:value={editTaskForm.description}
-						placeholder="Enter task description"
-						rows="4"
-						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-					></textarea>
-				</div>
-				
-				<div>
-					<label for="edit-task-status" class="block text-sm font-medium text-gray-300 mb-2">
-						Status
-					</label>
-					<select 
-						id="edit-task-status"
-						bind:value={editTaskForm.status}
-						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-					>
-						{#each columns as column}
-							<option value={column.id}>{column.title}</option>
+			<FormField label="Description" id="edit-task-description">
+				<Textarea 
+					id="edit-task-description"
+					bind:value={editTaskForm.description}
+					placeholder="Enter task description"
+					rows={4}
+				/>
+			</FormField>
+			
+			<FormField label="Status" id="edit-task-status">
+				<Select 
+					id="edit-task-status"
+					bind:value={editTaskForm.status}
+				>
+					{#each columns as column}
+						<option value={column.id}>{column.title}</option>
+					{/each}
+				</Select>
+			</FormField>
+			
+			<FormField label="Base Directory" id="edit-task-base-directory" required>
+				<Select 
+					id="edit-task-base-directory"
+					bind:value={editTaskForm.baseDirectoryId}
+					placeholder="Select a base directory..."
+					required
+				>
+					{#if project && project.baseDirectories}
+						{#each project.baseDirectories as directory}
+							<option value={directory.base_directory_id}>{directory.path}</option>
 						{/each}
-					</select>
-				</div>
-				
-				<div>
-					<label for="edit-task-base-directory" class="block text-sm font-medium text-gray-300 mb-2">
-						Base Directory
-					</label>
-					<select 
-						id="edit-task-base-directory"
-						bind:value={editTaskForm.baseDirectoryId}
-						class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
-						required
-					>
-						<option value="">Select a base directory...</option>
-						{#if project && project.baseDirectories}
-							{#each project.baseDirectories as directory}
-								<option value={directory.base_directory_id}>{directory.path}</option>
-							{/each}
-						{/if}
-					</select>
-				</div>
-				
-				<div class="flex gap-3 pt-4">
-					<button 
-						type="submit"
-						disabled={updatingTasks.has(editingTask.id)}
-						class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-					>
-						{#if updatingTasks.has(editingTask.id)}
-							<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-							Saving...
-						{:else}
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-							</svg>
-							Save Changes
-						{/if}
-					</button>
-					<button 
-						type="button"
-						on:click={closeEditTaskModal}
-						class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-					>
-						Cancel
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}
-
-</div>
+					{/if}
+				</Select>
+			</FormField>
+			
+			<div class="flex gap-3 pt-4">
+				<Button 
+					type="submit"
+					disabled={updatingTasks.has(editingTask.id)}
+					loading={updatingTasks.has(editingTask.id)}
+					variant="primary"
+				>
+					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+					</svg>
+					{updatingTasks.has(editingTask.id) ? 'Saving...' : 'Save Changes'}
+				</Button>
+				<Button 
+					type="button"
+					onclick={closeEditTaskModal}
+					variant="secondary"
+				>
+					Cancel
+				</Button>
+			</div>
+		</form>
+	{/if}
+</Modal>

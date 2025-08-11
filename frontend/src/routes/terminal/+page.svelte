@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import Card from '$lib/components/ui/Card.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -362,7 +363,13 @@
 						{#each taskSessions as session}
 							<Card 
 								class="card-hover cursor-pointer border-yellow-200 dark:border-yellow-800 hover:border-yellow-400 dark:hover:border-yellow-600"
-								onclick={() => attachToSession(session)}
+								onclick={() => {
+									if (session.execution_id) {
+										goto(`/tasks/${session.execution_id}`);
+									} else {
+										attachToSession(session);
+									}
+								}}
 							>
 								<div class="flex items-center justify-between mb-3">
 									<div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
@@ -374,14 +381,34 @@
 								<div class="text-sm text-gray-600 dark:text-gray-300 mb-3 space-y-1">
 									<div>Task: <span class="text-gray-900 dark:text-white font-mono">{session.task_name || `ID: ${session.task_id}`}</span></div>
 									<div>Agent: <span class="text-gray-900 dark:text-white font-mono">{session.agent_name || `ID: ${session.agent_id}`}</span></div>
+									{#if session.execution_id}
+										<div class="text-xs text-blue-600 dark:text-blue-400 font-medium">
+											→ Click to view task execution
+										</div>
+									{/if}
 								</div>
 								<div class="terminal-preview bg-gray-900 dark:bg-black rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
 									<pre class="whitespace-pre font-mono" style="margin: 0;">{@html session.preview}</pre>
 								</div>
-								<div class="mt-3 flex justify-end">
+								<div class="mt-3 flex justify-between items-center">
 									<Badge variant="warning" size="sm">
 										TASK SESSION
 									</Badge>
+									{#if session.execution_id}
+										<Button 
+											variant="ghost" 
+											size="xs"
+											onclick={(e) => {
+												e.stopPropagation();
+												attachToSession(session);
+											}}
+										>
+											<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+											</svg>
+											Terminal
+										</Button>
+									{/if}
 								</div>
 							</Card>
 						{/each}

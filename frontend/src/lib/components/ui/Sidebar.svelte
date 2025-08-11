@@ -38,13 +38,7 @@
 	<div class="h-full px-3 py-4 overflow-y-auto">
 		<!-- Logo -->
 		<div class="flex items-center {collapsed ? 'justify-center' : 'pl-2.5'} mb-5">
-			{#if !collapsed}
-				<img src="https://remote-code.com/static/images/banner.svg" class="h-8 mr-3" alt="Remote-Code Logo" />
-				<span class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">Remote-Code</span>
-			{:else}
-				<img src="https://remote-code.com/static/images/banner.svg" class="h-8" alt="Remote-Code Logo" />
-			{/if}
-		</div>
+		<img src="https://remote-code.com/static/images/banner.svg" class="w-full" alt="Remote-Code Logo" />		</div>
 
 		<!-- Navigation -->
 		<ul class="space-y-2 font-medium">
