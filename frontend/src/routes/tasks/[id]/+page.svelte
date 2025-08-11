@@ -715,7 +715,7 @@
 										<h1 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
 											{execution.task_title || `Task ${execution.task_id}`}
 										</h1>
-										<StatusBadge status={execution.status?.toLowerCase() === 'waiting' ? 'pending' : execution.status?.toLowerCase()} />
+										<StatusBadge status={execution.status?.toLowerCase()} />
 									</div>
 									<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
 										Task Execution #{execution.id}
@@ -790,7 +790,7 @@
 						<div class="space-y-3 text-sm">
 							<div class="flex justify-between">
 								<span class="text-gray-500 dark:text-gray-400">Status:</span>
-								<StatusBadge status={execution.status?.toLowerCase() === 'waiting' ? 'pending' : execution.status?.toLowerCase()} size="sm" />
+								<StatusBadge status={execution.status?.toLowerCase()} size="sm" />
 							</div>
 							<div class="flex justify-between">
 								<span class="text-gray-500 dark:text-gray-400">Agent:</span>
