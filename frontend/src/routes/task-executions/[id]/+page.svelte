@@ -387,13 +387,28 @@
 		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
 		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${sessionName}`;
 		ws = new WebSocket(wsUrl);
+		ws.binaryType = 'arraybuffer';
 
 		ws.onopen = function() {
 			console.log('WebSocket connected to task execution session:', sessionName);
+			// Send initial size
+			try {
+				if (term) {
+					ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+				}
+			} catch (e) {
+				console.warn('Failed to send resize on open:', e);
+			}
 		};
 
+		const decoder = new TextDecoder('utf-8');
 		ws.onmessage = function(event) {
-			term.write(event.data);
+			if (typeof event.data === 'string') {
+				term.write(event.data);
+				return;
+			}
+			const text = decoder.decode(new Uint8Array(event.data), { stream: true });
+			if (text) term.write(text);
 		};
 
 		ws.onerror = function(error) {
@@ -410,8 +425,16 @@
 			}
 		});
 
+		const sendResize = () => {
+			if (ws && ws.readyState === WebSocket.OPEN && term && fitAddon) {
+				ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+			}
+		};
+		let resizeTimeout;
 		const handleResize = () => {
 			fitAddon.fit();
+			clearTimeout(resizeTimeout);
+			resizeTimeout = setTimeout(sendResize, 50);
 		};
 
 		window.addEventListener('resize', handleResize);

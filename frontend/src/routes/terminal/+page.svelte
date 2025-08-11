@@ -98,7 +98,11 @@
 			script3.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.js';
 			document.head.appendChild(script3);
 
-			script3.onload = () => createTerminal(sessionType);
+			const script4 = document.createElement('script');
+			script4.src = 'https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.4.0/lib/xterm-addon-unicode11.js';
+			document.head.appendChild(script4);
+
+			script4.onload = () => createTerminal(sessionType);
 		} else {
 			createTerminal(sessionType);
 		}
@@ -117,6 +121,7 @@
 				lineHeight: 1.0,
 				letterSpacing: 0,
 				allowTransparency: false,
+				allowProposedApi: true,
 			});
 		} catch (error) {
 			console.error('Failed to create terminal:', error);
@@ -133,9 +138,22 @@
 			canvasAddon = new window.CanvasAddon.CanvasAddon();
 			term.loadAddon(fitAddon);
 			term.loadAddon(canvasAddon);
+			if (window.Unicode11Addon) {
+				const unicode11 = new window.Unicode11Addon.Unicode11Addon();
+				term.loadAddon(unicode11);
+				term.unicode.activeVersion = '11';
+			}
 
 			term.open(terminalElement);
 			fitAddon.fit();
+			// Send initial size to backend
+			try {
+				if (ws && ws.readyState === WebSocket.OPEN) {
+					ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+				}
+			} catch (e) {
+				console.warn('Failed to send initial resize:', e);
+			}
 			terminalReady = true;
 		} catch (error) {
 			console.error('Failed to initialize terminal addons:', error);
@@ -151,18 +169,34 @@
 			: `${wsProtocol}//${host}/ws?session=${selectedSession.name}`;
 		
 		ws = new WebSocket(wsUrl);
+		ws.binaryType = 'arraybuffer';
 
 		ws.onopen = function() {
 			console.log('WebSocket connected');
 			isConnected = true;
+			// Inform backend of current terminal size
+			try {
+				if (term) {
+					ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+				}
+			} catch (e) {
+				console.warn('Failed to send resize on open:', e);
+			}
 			if (sessionType !== 'global') {
 				// Attach to tmux session
 				ws.send(`tmux attach -t ${selectedSession.name}\n`);
 			}
 		};
 
+		const decoder = new TextDecoder('utf-8');
 		ws.onmessage = function(event) {
-			term.write(event.data);
+			if (typeof event.data === 'string') {
+				term.write(event.data);
+				return;
+			}
+			// ArrayBuffer path
+			const text = decoder.decode(new Uint8Array(event.data), { stream: true });
+			if (text) term.write(text);
 		};
 
 		ws.onerror = function(error) {
@@ -180,12 +214,21 @@
 			ws.send(data);
 		});
 
-		const handleResize = () => {
-			fitAddon.fit();
+		const sendResize = () => {
+			if (ws && ws.readyState === WebSocket.OPEN && term && fitAddon) {
+				ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+			}
 		};
 
-		window.addEventListener('resize', handleResize);
-	}
+		let resizeTimeout;
+		const handleResize = () => {
+			fitAddon.fit();
+			clearTimeout(resizeTimeout);
+			resizeTimeout = setTimeout(sendResize, 50);
+		};
+ 
+ 		window.addEventListener('resize', handleResize);
+ 	}
 
 	function closeTerminal() {
 		if (ws) {

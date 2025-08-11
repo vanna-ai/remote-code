@@ -2,13 +2,13 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"unicode/utf8"
 
 	"remote-code/db"
 
@@ -88,8 +88,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Creating/attaching to global terminal session")
 		cmd = exec.Command("tmux", "new-session", "-A", "-s", "remote-code")
 	}
-	
-	ptmx, err := pty.Start(cmd)
+
+	// Ensure proper terminal environment for UTF-8 and colors
+	cmd.Env = append(os.Environ(),
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+		"TERM=xterm-256color",
+	)
+ 
+ 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("Failed to start pty: %v", err)
 		return
@@ -103,12 +110,27 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				log.Printf("WebSocket read error: %v", err)
 				break
 			}
+
+			// Try to parse control messages (e.g., resize)
+			type resizeMsg struct {
+				Type string `json:"type"`
+				Cols int    `json:"cols"`
+				Rows int    `json:"rows"`
+			}
+			var rm resizeMsg
+			if err := json.Unmarshal(message, &rm); err == nil && rm.Type == "resize" {
+				if rm.Cols > 0 && rm.Rows > 0 {
+					_ = pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(rm.Cols), Rows: uint16(rm.Rows)})
+				}
+				continue
+			}
+
 			ptmx.Write(message)
 		}
 	}()
 
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 4096)
 		for {
 			n, err := ptmx.Read(buf)
 			if err != nil {
@@ -117,15 +139,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				}
 				break
 			}
-			
-			// Ensure the data is valid UTF-8 before sending
-			data := buf[:n]
-			if !utf8.Valid(data) {
-				// Convert invalid UTF-8 to valid UTF-8 by replacing invalid bytes
-				data = []byte(strings.ToValidUTF8(string(data), "�"))
-			}
-			
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			// Send raw bytes as a binary WebSocket frame; the browser will decode UTF-8 progressively
+			if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
 				log.Printf("WebSocket write error: %v", err)
 				break
 			}

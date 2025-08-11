@@ -31,6 +31,7 @@ type GitFile struct {
 }
 
 type GitStatus struct {
+	IsRepo         bool      `json:"isRepo"`
 	CurrentBranch  string    `json:"currentBranch"`
 	Upstream       string    `json:"upstream"`
 	Ahead          int       `json:"ahead"`
@@ -117,7 +118,7 @@ func getGitStatus(dir string) (*GitStatus, int, string, error) {
 		return nil, 1, porcelain, err
 	}
 
-	status := &GitStatus{StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}}
+	status := &GitStatus{IsRepo: true, StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}}
 
 	// Parse branch line: e.g., "## main...origin/main [ahead 1]"
 	for _, line := range strings.Split(strings.TrimSpace(short), "\n") {
@@ -182,15 +183,15 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
 			return
 		}
-		st, code, stdout, err := getGitStatus(dir)
+		// If not a git repo, return a benign 200 with isRepo=false to avoid noisy 400s in UI.
+		if out, _, err := runGit(dir, "rev-parse", "--is-inside-work-tree"); err != nil || strings.TrimSpace(out) != "true" {
+			json.NewEncoder(w).Encode(&GitStatus{IsRepo: false, StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}})
+			return
+		}
+		st, _, _, err := getGitStatus(dir)
 		if err != nil && st == nil {
-			// Likely not a repo or other error
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":  err.Error(),
-				"code":   code,
-				"output": stdout,
-			})
+			// Unexpected git error; still avoid 400 to keep UI clean
+			json.NewEncoder(w).Encode(&GitStatus{IsRepo: false, StagedFiles: []GitFile{}, UnstagedFiles: []GitFile{}, UntrackedFiles: []GitFile{}, MergeConflicts: []GitFile{}})
 			return
 		}
 		json.NewEncoder(w).Encode(st)
