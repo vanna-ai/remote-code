@@ -99,7 +99,7 @@
 			document.head.appendChild(script3);
 
 			const script4 = document.createElement('script');
-			script4.src = 'https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.4.0/lib/xterm-addon-unicode11.js';
+			script4.src = 'https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.js';
 			document.head.appendChild(script4);
 
 			script4.onload = () => createTerminal();

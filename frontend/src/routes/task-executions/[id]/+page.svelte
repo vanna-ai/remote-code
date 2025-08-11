@@ -372,6 +372,7 @@
 			lineHeight: 1.0,
 			letterSpacing: 0,
 			allowTransparency: false,
+			allowProposedApi: true,
 		});
 
 		fitAddon = new window.FitAddon.FitAddon();
@@ -455,7 +456,11 @@
 			script3.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.js';
 			document.head.appendChild(script3);
 
-			script3.onload = () => createDevTerminal();
+			const script4 = document.createElement('script');
+			script4.src = 'https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.8.0/lib/addon-unicode11.js';
+			document.head.appendChild(script4);
+
+			script4.onload = () => createDevTerminal();
 		} else {
 			createDevTerminal();
 		}
@@ -476,12 +481,18 @@
 			lineHeight: 1.0,
 			letterSpacing: 0,
 			allowTransparency: false,
+			allowProposedApi: true,
 		});
 
 		devFitAddon = new window.FitAddon.FitAddon();
 		devCanvasAddon = new window.CanvasAddon.CanvasAddon();
 		devTerm.loadAddon(devFitAddon);
 		devTerm.loadAddon(devCanvasAddon);
+		if (window.Unicode11Addon) {
+			const unicode11 = new window.Unicode11Addon.Unicode11Addon();
+			devTerm.loadAddon(unicode11);
+			devTerm.unicode.activeVersion = '11';
+		}
 
 		devTerm.open(devTerminalElement);
 		devFitAddon.fit();
@@ -491,13 +502,29 @@
 		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
 		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${devSessionName}`;
 		devWs = new WebSocket(wsUrl);
+		devWs.binaryType = 'arraybuffer';
 
 		devWs.onopen = function() {
 			console.log('WebSocket connected to dev server session:', devSessionName);
+			try {
+				if (devTerm) {
+					devWs.send(JSON.stringify({ type: 'resize', cols: devTerm.cols, rows: devTerm.rows }));
+					// Kick the shell to redraw prompt
+					devWs.send('\r');
+				}
+			} catch (e) {
+				console.warn('Failed to send dev resize on open:', e);
+			}
 		};
 
+		const devDecoder = new TextDecoder('utf-8');
 		devWs.onmessage = function(event) {
-			devTerm.write(event.data);
+			if (typeof event.data === 'string') {
+				devTerm.write(event.data);
+				return;
+			}
+			const text = devDecoder.decode(new Uint8Array(event.data), { stream: true });
+			if (text) devTerm.write(text);
 		};
 
 		devWs.onerror = function(error) {
@@ -514,8 +541,16 @@
 			}
 		});
 
+		const devSendResize = () => {
+			if (devWs && devWs.readyState === WebSocket.OPEN && devTerm && devFitAddon) {
+				devWs.send(JSON.stringify({ type: 'resize', cols: devTerm.cols, rows: devTerm.rows }));
+			}
+		};
+		let devResizeTimeout;
 		const handleResize = () => {
 			devFitAddon.fit();
+			clearTimeout(devResizeTimeout);
+			devResizeTimeout = setTimeout(devSendResize, 50);
 		};
 
 		window.addEventListener('resize', handleResize);
