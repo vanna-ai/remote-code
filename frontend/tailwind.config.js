@@ -1,10 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{html,js,svelte,ts}'],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        vanna: {
+          navy: '#023d60',
+          cream: '#e7e1cf',
+          teal: '#15a8a8',
+          orange: '#fe5d26',
+          magenta: '#bf1363',
+        },
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -31,8 +37,15 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Monaco', 'Cascadia Code', 'Segoe UI Mono', 'Roboto Mono', 'Oxygen Mono', 'Ubuntu Monospace', 'Source Code Pro', 'Fira Mono', 'Droid Sans Mono', 'Courier New', 'monospace'],
+        sans: ['Space Grotesk', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif'],
+        serif: ['Roboto Slab', 'ui-serif', 'Georgia', 'Cambria', 'Times New Roman', 'Times', 'serif'],
+        mono: ['Disket Mono', 'Space Mono', 'JetBrains Mono', 'Monaco', 'Cascadia Code', 'Segoe UI Mono', 'Roboto Mono', 'monospace'],
+      },
+      boxShadow: {
+        'vanna-subtle': '0 4px 15px rgba(21,168,168,0.2)',
+        'vanna-card': '0 15px 40px rgba(15,23,42,0.08)',
+        'vanna-feature': '0 25px 55px rgba(21,168,168,0.18)',
+        'vanna-showcase': '0 30px 80px rgba(59,130,246,0.15)',
       },
     },
   },

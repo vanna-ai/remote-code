@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'gray';
+		variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'gray' | 'magenta';
 		size?: 'sm' | 'md' | 'lg';
 		class?: string;
 	}
@@ -15,13 +15,14 @@
 	const baseClasses = 'inline-flex items-center font-medium rounded-full';
 
 	const variantClasses = {
-		primary: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-		secondary: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-		success: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-		danger: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-		warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
-		info: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300',
-		gray: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+		primary: 'bg-vanna-teal/10 text-vanna-teal',
+		secondary: 'bg-vanna-cream text-vanna-navy',
+		success: 'bg-vanna-teal/10 text-vanna-teal',
+		danger: 'bg-vanna-orange/10 text-vanna-orange',
+		warning: 'bg-vanna-orange/10 text-vanna-orange',
+		info: 'bg-vanna-teal/10 text-vanna-teal',
+		gray: 'bg-slate-100 text-slate-600',
+		magenta: 'bg-vanna-magenta/10 text-vanna-magenta'
 	};
 
 	const sizeClasses = {

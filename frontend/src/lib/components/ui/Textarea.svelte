@@ -45,8 +45,8 @@
 	};
 
 	const baseClasses = 'w-full rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 text-sm';
-	const normalClasses = 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:focus:border-blue-400 dark:focus:ring-blue-400';
-	const errorClasses = 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 focus:border-red-500 focus:ring-red-500';
+	const normalClasses = 'border-slate-300 bg-white text-vanna-navy focus:border-vanna-teal focus:ring-vanna-teal placeholder-slate-400';
+	const errorClasses = 'border-vanna-orange bg-vanna-orange/5 text-vanna-navy focus:border-vanna-orange focus:ring-vanna-orange';
 
 	let classes = $derived(`${baseClasses} ${resizeClasses[resize]} ${error ? errorClasses : normalClasses} ${className}`);
 </script>

@@ -6,8 +6,7 @@
 	import Card from '$lib/components/ui/Card.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	
+
 	$: breadcrumbSegments = [
 		{ label: "", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
@@ -27,7 +26,6 @@
 	let devFitAddon;
 	let devCanvasAddon;
 	let execution = null;
-	let gitStatus = null;
 	let loading = true;
 	let error = null;
 	let devServerRunning = false;
@@ -37,17 +35,12 @@
 	let isResendingTask = false;
 	let isDeleting = false;
 	let isRejecting = false;
-    let gitStatusPoll = null;
 
 	$: executionId = $page.params.id;
 
 	onMount(() => {
 		loadTaskExecutionDetails();
-		// Poll git status every second
-		gitStatusPoll = setInterval(() => {
-			loadGitStatus();
-		}, 1000);
-		
+
 		// Periodically refresh task execution status to update waiting status (lightweight)
 		const executionRefreshInterval = setInterval(async () => {
 			// Only refresh if not currently loading to avoid conflicts
@@ -55,12 +48,8 @@
 				await refreshExecutionStatus();
 			}
 		}, 10000); // Refresh every 10 seconds
-		
+
 		return () => {
-			if (gitStatusPoll) {
-				clearInterval(gitStatusPoll);
-				gitStatusPoll = null;
-			}
 			if (executionRefreshInterval) {
 				clearInterval(executionRefreshInterval);
 			}
@@ -111,30 +100,21 @@
         try {
             loading = true;
             error = null;
-            
+
             // Get task execution details with all related information
             const response = await fetch(`/api/task-executions/${executionId}`);
             if (response.ok) {
                 execution = await response.json();
-				
-				// Check if dev server is running
-				if (execution.worktree_id) {
-					const worktreeResponse = await fetch(`/api/worktrees/${execution.worktree_id}`);
-					if (worktreeResponse.ok) {
-						const worktree = await worktreeResponse.json();
-						devServerRunning = worktree.dev_server_tmux_id && worktree.dev_server_tmux_id.Valid;
-						showDevTerminal = devServerRunning;
-					}
-				}
-				
-            // Load git status (used for merge and push controls)
-            await loadGitStatus();
-				
+
+				// Check if dev server is running (based on dev_server_tmux_id)
+				devServerRunning = execution.dev_server_tmux_id?.Valid || false;
+				showDevTerminal = devServerRunning;
+
 				// Initialize terminal once we have execution info (only if not already initialized)
 				if (!term) {
 					initializeTerminal();
 				}
-				
+
 				// Initialize dev terminal if dev server is running (only if not already initialized)
 				if (showDevTerminal && !devTerm) {
 					initializeDevTerminal();
@@ -153,7 +133,7 @@
 	// Lightweight function to refresh only the execution status without causing flicker
 	async function refreshExecutionStatus() {
 		if (!execution) return;
-		
+
 		try {
 			// Get task execution details without setting loading state
 			const response = await fetch(`/api/task-executions/${executionId}`);
@@ -172,169 +152,6 @@
 			console.warn('Failed to refresh execution status:', err);
 		}
 	}
-
-    async function loadGitStatus() {
-        if (!execution?.worktree_path) return;
-        try {
-            const res = await fetch(`/api/git/status?path=${encodeURIComponent(execution.worktree_path)}`);
-            if (res.ok) {
-                gitStatus = await res.json();
-            } else {
-                gitStatus = null;
-            }
-            // Also compute merge readiness
-            try {
-                const mr = await fetch(`/api/git/merge-ready?path=${encodeURIComponent(execution.worktree_path)}`);
-                if (mr.ok) {
-                    const data = await mr.json();
-                    mergeReady = !!data.ready;
-                    mergeReadyReason = data.ready ? '' : (data.reason || 'Not ready');
-                } else {
-                    mergeReady = false;
-                    mergeReadyReason = 'Merge readiness check failed';
-                }
-            } catch (e) {
-                mergeReady = false;
-                mergeReadyReason = 'Merge readiness check failed';
-            }
-        } catch (err) {
-            console.error('Failed to load git status:', err);
-        }
-    }
-
-    async function stageFile(file) {
-        if (!execution?.worktree_path) return;
-        await fetch(`/api/git/add`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: execution.worktree_path, file })
-        });
-        await loadGitStatus();
-    }
-
-    async function unstageFile(file) {
-        if (!execution?.worktree_path) return;
-        await fetch(`/api/git/unstage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: execution.worktree_path, file })
-        });
-        await loadGitStatus();
-    }
-
-    let diffOpen = false;
-    let diffText = '';
-    let diffTitle = '';
-
-    async function viewDiff(file, staged=false) {
-        if (!execution?.worktree_path) return;
-        const url = `/api/git/diff?path=${encodeURIComponent(execution.worktree_path)}&file=${encodeURIComponent(file)}&staged=${staged}`;
-        const res = await fetch(url);
-        if (res.ok) {
-            const data = await res.json();
-            diffText = data.diff || '';
-            diffTitle = `${staged ? 'Index vs HEAD' : 'Working Tree vs Index'} — ${file}`;
-            diffOpen = true;
-        }
-    }
-
-    let commitMsg = '';
-    let committing = false;
-    async function commitChanges() {
-        if (!execution?.worktree_path || !commitMsg.trim()) return;
-        committing = true;
-        try {
-            await fetch(`/api/git/commit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: execution.worktree_path, message: commitMsg })
-            });
-            commitMsg = '';
-            await loadGitStatus();
-        } finally {
-            committing = false;
-        }
-    }
-
-	let merging = false;
-    let pushing = false;
-    let mergeReady = false;
-    let mergeReadyReason = '';
-    let updatingFromMain = false;
-    async function mergeBranch() {
-        if (!execution?.worktree_path || !gitStatus?.currentBranch) return;
-        merging = true;
-        try {
-            const res = await fetch(`/api/git/merge`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: execution.worktree_path, branch: gitStatus.currentBranch, taskId: execution.task_id })
-            });
-            let data = null;
-            try {
-                data = await res.json();
-            } catch (e) {
-                // ignore
-            }
-            if (!res.ok || (data && data.ok === false)) {
-                const details = data?.error || data?.output || 'Unknown error';
-                const step = data?.step ? ` (step: ${data.step})` : '';
-                alert(`Merge failed${step}: ${details}`);
-                return;
-            }
-            await loadGitStatus();
-        } finally {
-            merging = false;
-        }
-    }
-
-    async function pushChanges() {
-        if (!execution?.worktree_path) return;
-        pushing = true;
-        try {
-            const res = await fetch(`/api/git/push`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: execution.worktree_path })
-            });
-            let data = null;
-            try { data = await res.json(); } catch (e) {}
-            if (!res.ok || (data && data.ok === false)) {
-                const details = data?.error || data?.output || 'Unknown error';
-                const step = data?.step ? ` (step: ${data.step})` : '';
-                alert(`Push failed${step}: ${details}`);
-                return;
-            }
-            await loadGitStatus();
-        } finally {
-            pushing = false;
-        }
-    }
-
-    async function updateFromMain(strategy = 'merge') {
-        if (!execution?.worktree_path) return;
-        updatingFromMain = true;
-        try {
-            const res = await fetch(`/api/git/update-from-main`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: execution.worktree_path, strategy })
-            });
-            let data = null;
-            try { data = await res.json(); } catch (e) {}
-            if (!res.ok || (data && data.ok === false)) {
-                const details = data?.error || data?.output || 'Unknown error';
-                const step = data?.step ? ` (step: ${data.step})` : '';
-                alert(`Update from main failed${step}: ${details}`);
-                return;
-            }
-            await loadGitStatus();
-        } finally {
-            updatingFromMain = false;
-        }
-    }
-
-    // No branch dropdown; merges current worktree branch into base main
 
 	function initializeTerminal() {
 		// Load xterm if not already loaded
@@ -497,8 +314,8 @@
 		devTerm.open(devTerminalElement);
 		devFitAddon.fit();
 
-		// Create WebSocket connection for the dev server session
-		const devSessionName = `dev_${execution.worktree_id}`;
+		// Create WebSocket connection for the dev server session (uses execution ID)
+		const devSessionName = `dev_${executionId}`;
 		const wsProtocol = $page.url.protocol === 'https:' ? 'wss:' : 'ws:';
 		const wsUrl = `${wsProtocol}//${$page.url.host}/ws?session=${devSessionName}`;
 		devWs = new WebSocket(wsUrl);
@@ -557,17 +374,15 @@
 	}
 
 	async function runDevServer() {
-		if (!execution?.worktree_id) return;
-		
 		try {
-			const response = await fetch(`/api/worktrees/${execution.worktree_id}/dev-server`, {
+			const response = await fetch(`/api/task-executions/${executionId}/dev-server`, {
 				method: 'POST'
 			});
-			
+
 			if (response.ok) {
 				devServerRunning = true;
 				showDevTerminal = true;
-				
+
 				// Initialize dev terminal after a short delay to ensure the session is created
 				setTimeout(() => {
 					initializeDevTerminal();
@@ -580,17 +395,15 @@
 	}
 
 	async function stopDevServer() {
-		if (!execution?.worktree_id) return;
-		
 		try {
-			const response = await fetch(`/api/worktrees/${execution.worktree_id}/dev-server`, {
+			const response = await fetch(`/api/task-executions/${executionId}/dev-server`, {
 				method: 'DELETE'
 			});
-			
+
 			if (response.ok) {
 				devServerRunning = false;
 				showDevTerminal = false;
-				
+
 				// Close dev terminal connections
 				if (devWs) {
 					devWs.close();
@@ -636,7 +449,7 @@
 
 	async function sendInputToSession() {
 		if (!inputText.trim() || isSendingInput) return;
-		
+
 		try {
 			isSendingInput = true;
 			const response = await fetch(`/api/task-executions/${executionId}/send-input`, {
@@ -648,7 +461,7 @@
 					input: inputText
 				})
 			});
-			
+
 			if (response.ok) {
 				inputText = ''; // Clear the input
 			} else {
@@ -665,13 +478,13 @@
 
 	async function resendTaskToSession() {
 		if (isResendingTask) return;
-		
+
 		try {
 			isResendingTask = true;
 			const response = await fetch(`/api/task-executions/${executionId}/resend-task`, {
 				method: 'POST'
 			});
-			
+
 			if (response.ok) {
 				const result = await response.json();
 				// Optional: Show a success message
@@ -697,18 +510,18 @@
 
 	async function deleteTaskExecution() {
 		if (isDeleting) return;
-		
+
 		// Show confirmation dialog
-		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n• Kill all associated tmux sessions\n• Remove the worktree directory\n• Run teardown commands\n• Delete all related data\n\nThis action cannot be undone.`);
-		
+		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n- Kill all associated tmux sessions\n- Run teardown commands\n- Delete all related data\n\nThis action cannot be undone.`);
+
 		if (!confirmed) return;
-		
+
 		try {
 			isDeleting = true;
 			const response = await fetch(`/api/task-executions/${executionId}`, {
 				method: 'DELETE'
 			});
-			
+
 			if (response.ok) {
 				// Navigate back to tasks list
 				goto('/task-executions');
@@ -726,18 +539,18 @@
 
 	async function rejectTaskExecution() {
 		if (isRejecting) return;
-		
+
 		// Show confirmation dialog
-		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n• Set the status to "rejected"\n• Mark this as a loss against other agents for ELO calculation\n• This action cannot be undone.`);
-		
+		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n- Set the status to "rejected"\n- Mark this as a loss against other agents for ELO calculation\n- This action cannot be undone.`);
+
 		if (!confirmed) return;
-		
+
 		try {
 			isRejecting = true;
 			const response = await fetch(`/api/task-executions/${executionId}/reject`, {
 				method: 'POST'
 			});
-			
+
 			if (response.ok) {
 				// Refresh the execution data to update the status
 				await loadTaskExecutionDetails();
@@ -759,68 +572,68 @@
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+<div class="min-h-screen">
 	<div class="container mx-auto p-6">
 		<!-- Breadcrumb -->
 		<Breadcrumb segments={breadcrumbSegments} />
-		
+
 		<!-- Header -->
 		<div class="mb-6">
 			{#if loading}
-				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+				<div class="border-b border-slate-200 pb-6 mb-8">
 					<div class="flex items-center gap-4">
-						<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+						<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-vanna-teal"></div>
 						<div>
-							<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Loading Task Execution...</h1>
-							<p class="text-gray-600 dark:text-gray-400">Fetching execution details</p>
+							<h1 class="text-2xl font-bold text-vanna-navy font-serif">Loading Task Execution...</h1>
+							<p class="text-slate-500">Fetching execution details</p>
 						</div>
 					</div>
 				</div>
 			{:else if error}
-				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+				<div class="border-b border-slate-200 pb-6 mb-8">
 					<div class="flex items-center gap-4">
-						<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-8 h-8 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 						</svg>
 						<div>
-							<h1 class="text-2xl font-bold text-red-500">Execution Not Found</h1>
-							<p class="text-gray-600 dark:text-gray-400">{error}</p>
+							<h1 class="text-2xl font-bold text-vanna-orange font-serif">Execution Not Found</h1>
+							<p class="text-slate-500">{error}</p>
 						</div>
 					</div>
 				</div>
 			{:else if execution}
-				<div class="border-b border-gray-200 dark:border-gray-700 pb-6 mb-8">
+				<div class="border-b border-slate-200 pb-6 mb-8">
 					<div class="flex items-center justify-between">
 						<div class="min-w-0 flex-1">
 							<div class="flex items-center gap-4 mb-2">
-								<div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+								<div class="w-12 h-12 bg-vanna-teal rounded-xl flex items-center justify-center">
 									<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 									</svg>
 								</div>
 								<div>
 									<div class="flex items-center gap-3">
-										<h1 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+										<h1 class="text-2xl font-bold text-vanna-navy font-serif sm:text-3xl">
 											{execution.task_title || `Task ${execution.task_id}`}
 										</h1>
 										<StatusBadge status={execution.status?.toLowerCase()} />
 									</div>
-									<p class="mt-1 text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-600">
+									<p class="mt-1 text-sm text-slate-500 flex items-center gap-2">
+										<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-vanna-teal/10 text-vanna-teal border border-vanna-teal/30">
 											{execution.agent_name || `Agent ${execution.agent_id}`}
 										</span>
 										<span>working in</span>
-										<code class="px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded border">
-											{execution.worktree_path || 'unknown path'}
+										<code class="px-2 py-1 text-xs font-mono bg-vanna-cream/50 text-vanna-navy rounded border border-slate-200">
+											{execution.base_directory_path || 'unknown path'}
 										</code>
 									</p>
 								</div>
 							</div>
 						</div>
-						
+
 						<div class="flex items-center gap-3 ml-6">
 							<div class="flex gap-2">
-								<Button 
+								<Button
 									variant={devServerRunning ? 'secondary' : 'success'}
 									onclick={() => runDevServer()}
 									disabled={devServerRunning}
@@ -830,9 +643,9 @@
 									</svg>
 									{devServerRunning ? 'Dev Server Running' : 'Run Dev Server'}
 								</Button>
-									
+
 								{#if devServerRunning}
-									<Button 
+									<Button
 										variant="danger"
 										onclick={() => stopDevServer()}
 									>
@@ -843,8 +656,8 @@
 										Stop Dev Server
 									</Button>
 								{/if}
-								
-								<Button 
+
+								<Button
 									variant="warning"
 									onclick={rejectTaskExecution}
 									disabled={isRejecting || execution.status === 'rejected'}
@@ -856,7 +669,7 @@
 									{isRejecting ? 'Rejecting...' : 'Reject'}
 								</Button>
 
-								<Button 
+								<Button
 									variant="danger"
 									onclick={deleteTaskExecution}
 									disabled={isDeleting}
@@ -873,8 +686,8 @@
 				</div>
 
 				{#if execution.status?.toLowerCase() === 'waiting'}
-					<Card class="mb-6 border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20">
-						<div class="flex items-center text-yellow-800 dark:text-yellow-200">
+					<Card class="mb-6 border-vanna-orange/30 bg-vanna-orange/5">
+						<div class="flex items-center text-vanna-orange">
 							<svg class="w-5 h-5 mr-3 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
 								<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
 							</svg>
@@ -883,14 +696,12 @@
 					</Card>
 				{/if}
 
-
-
 				<!-- Re-send Task Button (always show if running) -->
 				{#if execution.status === 'running'}
 					<Card class="mb-6">
 						<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-							<h3 class="text-lg font-semibold text-gray-900 dark:text-white">Task Controls</h3>
-							<Button 
+							<h3 class="text-lg font-semibold text-vanna-navy">Task Controls</h3>
+							<Button
 								variant="primary"
 								onclick={resendTaskToSession}
 								disabled={isResendingTask}
@@ -909,181 +720,47 @@
 				<!-- Task Description -->
 				{#if execution.task_description}
 					<Card class="mb-6">
-						<h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Task Description</h3>
-						<p class="text-gray-700 dark:text-gray-300">{execution.task_description}</p>
+						<h3 class="text-lg font-semibold text-vanna-navy mb-3">Task Description</h3>
+						<p class="text-slate-600">{execution.task_description}</p>
 					</Card>
 				{/if}
 			{/if}
 		</div>
 
-    <!-- Git Panel -->
-    {#if !loading && !error && execution && gitStatus}
-        <Card class="mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Branch</span>
-                    <span class="px-2 py-1 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-700">{gitStatus.currentBranch}</span>
-                    {#if gitStatus.ahead || gitStatus.behind}
-                        <span class="text-xs text-gray-500 dark:text-gray-400">{gitStatus.ahead ? `↑ ${gitStatus.ahead}` : ''} {gitStatus.behind ? `↓ ${gitStatus.behind}` : ''}</span>
-                    {/if}
-                </div>
-                <div class="flex items-center gap-2">
-                    <Button variant="ghost" size="xs" onclick={loadGitStatus}>Refresh</Button>
-                    <Button
-                        variant="success"
-                        size="xs"
-                        disabled={pushing || !gitStatus.upstream || gitStatus.ahead === 0}
-                        onclick={pushChanges}
-                        loading={pushing}
-                    >
-                        {pushing ? 'Pushing…' : 'Push'}
-                    </Button>
-                </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-green-400"></span>
-                        <span>Staged</span>
-                    </h4>
-                    {#if gitStatus.stagedFiles?.length}
-                        {#each gitStatus.stagedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
-                                <div class="flex items-center gap-2">
-                                    <Button variant="secondary" size="xs" onclick={() => viewDiff(f.path, true)}>Diff</Button>
-                                    <Button variant="secondary" size="xs" onclick={() => unstageFile(f.path)}>Unstage</Button>
-                                </div>
-                            </div>
-                        {/each}
-                    {:else}
-                        <div class="text-xs text-gray-500 dark:text-gray-400">No staged changes</div>
-                    {/if}
-                </div>
-                <div>
-                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-orange-400"></span>
-                        <span>Changes</span>
-                    </h4>
-                    {#if gitStatus.unstagedFiles?.length}
-                        {#each gitStatus.unstagedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
-                                <div class="flex items-center gap-2">
-                                    <Button variant="secondary" size="xs" onclick={() => viewDiff(f.path, false)}>Diff</Button>
-                                    <Button variant="primary" size="xs" onclick={() => stageFile(f.path)}>Stage</Button>
-                                </div>
-                            </div>
-                        {/each}
-                    {:else}
-                        <div class="text-xs text-gray-500 dark:text-gray-400">No unstaged changes</div>
-                    {/if}
-                </div>
-                <div>
-                    <h4 class="text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                        <span class="inline-flex w-2.5 h-2.5 rounded-full bg-sky-400"></span>
-                        <span>Untracked</span>
-                    </h4>
-                    {#if gitStatus.untrackedFiles?.length}
-                        {#each gitStatus.untrackedFiles as f}
-                            <div class="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 mb-1">
-                                <span class="truncate text-gray-900 dark:text-gray-100">{f.path}</span>
-                                <div class="flex items-center gap-2">
-                                    <Button variant="primary" size="xs" onclick={() => stageFile(f.path)}>Add</Button>
-                                </div>
-                            </div>
-                        {/each}
-                    {:else}
-                        <div class="text-xs text-gray-500 dark:text-gray-400">No untracked files</div>
-                    {/if}
-                </div>
-            </div>
-            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="Commit message"
-                        bind:value={commitMsg}
-                        class="flex-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:border-blue-500 focus:ring-blue-500 dark:focus:border-blue-400 dark:focus:ring-blue-400"
-                    />
-                    <Button 
-                        variant="success"
-                        disabled={committing || !commitMsg.trim()}
-                        loading={committing}
-                        onclick={commitChanges}
-                    >
-                        Commit
-                    </Button>
-                </div>
-                <div class="flex gap-2 items-center">
-                    <Button 
-                        variant="primary"
-                        disabled={merging || !mergeReady}
-                        loading={merging}
-                        onclick={mergeBranch}
-                    >
-                        {merging ? 'Merging…' : 'Merge into main'}
-                    </Button>
-                    {#if !mergeReady && mergeReadyReason}
-                        <span class="text-xs text-gray-500 dark:text-gray-400">{mergeReadyReason}</span>
-                        {#if mergeReadyReason.includes('Non fast-forward')}
-                            <Button 
-                                variant="ghost"
-                                size="xs"
-                                disabled={updatingFromMain}
-                                loading={updatingFromMain}
-                                onclick={() => updateFromMain('merge')}
-                            >
-                                {updatingFromMain ? 'Updating…' : 'Update from main'}
-                            </Button>
-                        {/if}
-                    {/if}
-                </div>
-            </div>
-        </Card>
-    {/if}
-
-    <!-- Diff Modal -->
-    <Modal open={diffOpen} title={diffTitle} size="xl" onClose={() => diffOpen = false}>
-        <div class="max-h-[60vh] overflow-auto">
-            <pre class="text-xs leading-snug whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900 p-4 rounded border">{diffText || 'No diff'}</pre>
-        </div>
-    </Modal>
-
     <!-- Terminal -->
 		{#if !loading && !error && execution}
-			<Card padding="none" class="bg-black border-gray-600 shadow-xl">
-				<div class="flex items-center justify-between p-4 border-b border-gray-600">
+			<Card padding="none" class="bg-black border-slate-600 shadow-xl">
+				<div class="flex items-center justify-between p-4 border-b border-slate-600">
 					<div class="flex items-center gap-3">
 						<div class="flex gap-1">
-							<div class="w-3 h-3 rounded-full bg-red-500"></div>
-							<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-							<div class="w-3 h-3 rounded-full bg-green-500"></div>
+							<div class="w-3 h-3 rounded-full bg-vanna-orange"></div>
+							<div class="w-3 h-3 rounded-full bg-vanna-magenta"></div>
+							<div class="w-3 h-3 rounded-full bg-vanna-teal"></div>
 						</div>
 						<span class="text-gray-400 text-sm font-mono">tmux attach -t task_{execution.task_id}_agent_{execution.agent_id}</span>
 					</div>
 					<div class="flex items-center gap-2 text-xs text-gray-400">
-						<div class="w-2 h-2 rounded-full bg-green-500"></div>
+						<div class="w-2 h-2 rounded-full bg-vanna-teal"></div>
 						<span>Connected</span>
 					</div>
 				</div>
 				<div class="p-4">
-					<div 
-						id="terminal" 
+					<div
+						id="terminal"
 						bind:this={terminalElement}
 						class="w-full h-[50vh] sm:h-[60vh] focus:outline-none"
 					></div>
 				</div>
 			</Card>
-			
-			<div class="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+
+			<div class="mt-4 text-sm text-slate-500 text-center">
 				<p>Terminal connected to task execution session</p>
 			</div>
 
 			<!-- Input Section for Sending Text to Session -->
 			{#if execution.status === 'running'}
 				<Card class="mt-6">
-					<h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+					<h4 class="text-sm font-semibold text-vanna-navy mb-3 flex items-center gap-2">
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
 						</svg>
@@ -1096,7 +773,7 @@
 							on:keydown={handleInputKeydown}
 							placeholder="Type a message and press Enter to send..."
 							disabled={isSendingInput}
-							class="flex-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:border-blue-500 focus:ring-blue-500 dark:focus:border-blue-400 dark:focus:ring-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
+							class="flex-1 w-full rounded-lg border border-slate-300 bg-white text-vanna-navy px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:border-vanna-teal focus:ring-vanna-teal disabled:opacity-50 disabled:cursor-not-allowed"
 						/>
 						<Button
 							variant="primary"
@@ -1110,7 +787,7 @@
 							{isSendingInput ? '' : 'Send'}
 						</Button>
 					</div>
-					<p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+					<p class="text-xs text-slate-500 mt-2">
 						Send text input directly to the agent session. Press Enter or click Send.
 					</p>
 				</Card>
@@ -1118,42 +795,42 @@
 
 			<!-- Dev Server Terminal -->
 			{#if showDevTerminal}
-				<Card padding="none" class="mt-6 bg-black border-green-600 shadow-xl">
-					<div class="flex items-center justify-between p-4 border-b border-green-600">
+				<Card padding="none" class="mt-6 bg-black border-vanna-teal shadow-xl">
+					<div class="flex items-center justify-between p-4 border-b border-vanna-teal">
 						<div class="flex items-center gap-3">
 							<div class="flex gap-1">
-								<div class="w-3 h-3 rounded-full bg-red-500"></div>
-								<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-								<div class="w-3 h-3 rounded-full bg-green-500"></div>
+								<div class="w-3 h-3 rounded-full bg-vanna-orange"></div>
+								<div class="w-3 h-3 rounded-full bg-vanna-magenta"></div>
+								<div class="w-3 h-3 rounded-full bg-vanna-teal"></div>
 							</div>
-							<span class="text-green-400 text-sm font-mono">tmux attach -t dev_{execution.worktree_id}</span>
-							<span class="px-2 py-1 rounded text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500">DEV SERVER</span>
+							<span class="text-vanna-teal text-sm font-mono">tmux attach -t dev_{executionId}</span>
+							<span class="px-2 py-1 rounded text-xs font-semibold bg-vanna-teal/20 text-vanna-teal border border-vanna-teal">DEV SERVER</span>
 						</div>
-						<div class="flex items-center gap-2 text-xs text-green-400">
-							<div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+						<div class="flex items-center gap-2 text-xs text-vanna-teal">
+							<div class="w-2 h-2 rounded-full bg-vanna-teal animate-pulse"></div>
 							<span>Running</span>
 						</div>
 					</div>
 					<div class="p-4">
-						<div 
-							id="dev-terminal" 
+						<div
+							id="dev-terminal"
 							bind:this={devTerminalElement}
 							class="w-full h-[40vh] sm:h-[50vh] focus:outline-none"
 						></div>
 					</div>
 				</Card>
-				
-				<div class="mt-4 text-sm text-green-600 dark:text-green-400 text-center">
+
+				<div class="mt-4 text-sm text-vanna-teal text-center">
 					<p>Dev server terminal - showing startup logs and output</p>
 				</div>
 			{/if}
 		{:else if error}
-			<Card class="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-8 text-center">
-				<svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<Card class="border-vanna-orange/30 bg-vanna-orange/5 p-8 text-center">
+				<svg class="w-16 h-16 text-vanna-orange mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 				</svg>
-				<h3 class="text-xl font-semibold text-red-800 dark:text-red-200 mb-2">Task Execution Not Available</h3>
-				<p class="text-red-600 dark:text-red-300 mb-6">{error}</p>
+				<h3 class="text-xl font-semibold text-vanna-orange mb-2">Task Execution Not Available</h3>
+				<p class="text-slate-600 mb-6">{error}</p>
 				<div class="flex gap-3 justify-center">
 					<Button href="/task-executions" variant="secondary">
 						View All Executions

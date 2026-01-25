@@ -312,8 +312,8 @@
 	<!-- Page Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Terminal Sessions</h1>
-			<p class="mt-2 text-gray-600 dark:text-gray-400">Manage tmux sessions and terminal access</p>
+			<h1 class="text-3xl font-bold text-vanna-navy font-serif">Terminal Sessions</h1>
+			<p class="mt-2 text-slate-500">Manage tmux sessions and terminal access</p>
 		</div>
 		<Button onclick={showGlobal} variant="primary">
 			<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -329,17 +329,17 @@
 			<div class="flex items-center justify-between mb-4">
 				<div class="flex items-center gap-3">
 					{#if selectedSession}
-						<div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+						<div class="flex items-center gap-2 text-vanna-orange">
 							{@html getSessionTypeIcon(selectedSession)}
 							<span class="font-mono">{selectedSession.name}</span>
 							{#if selectedSession.is_task}
-								<span class="text-sm text-gray-500 dark:text-gray-400">
+								<span class="text-sm text-slate-500">
 									({selectedSession.task_name || `Task ${selectedSession.task_id}`} • {selectedSession.agent_name || `Agent ${selectedSession.agent_id}`})
 								</span>
 							{/if}
 						</div>
 					{:else}
-						<div class="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+						<div class="flex items-center gap-2 text-vanna-teal">
 							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
 							</svg>
@@ -352,7 +352,7 @@
 				</Button>
 			</div>
 			
-			<div class="bg-black rounded-lg border border-gray-300 dark:border-gray-700 p-4 shadow-inner">
+			<div class="bg-black rounded-lg border border-slate-300 p-4 shadow-inner">
 				<div 
 					id="terminal" 
 					bind:this={terminalElement}
@@ -363,30 +363,30 @@
 			<!-- Connection Status -->
 			<div class="mt-4 text-sm flex items-center gap-4">
 				{#if connectionError}
-					<div class="flex items-center gap-2 text-red-600 dark:text-red-400">
-						<div class="w-2 h-2 bg-red-500 rounded-full"></div>
+					<div class="flex items-center gap-2 text-vanna-orange">
+						<div class="w-2 h-2 bg-vanna-orange rounded-full"></div>
 						<span>Error: {connectionError}</span>
 					</div>
 				{:else if isConnected && terminalReady}
-					<div class="flex items-center gap-2 text-green-600 dark:text-green-400">
-						<div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+					<div class="flex items-center gap-2 text-vanna-teal">
+						<div class="w-2 h-2 bg-vanna-teal rounded-full animate-pulse"></div>
 						<span>Connected</span>
 					</div>
 				{:else if isConnected && !terminalReady}
-					<div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
-						<div class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+					<div class="flex items-center gap-2 text-vanna-orange">
+						<div class="w-2 h-2 bg-vanna-orange rounded-full animate-pulse"></div>
 						<span>Initializing terminal...</span>
 					</div>
 				{:else}
-					<div class="flex items-center gap-2 text-red-600 dark:text-red-400">
-						<div class="w-2 h-2 bg-red-500 rounded-full"></div>
+					<div class="flex items-center gap-2 text-vanna-orange">
+						<div class="w-2 h-2 bg-vanna-orange rounded-full"></div>
 						<span>Disconnected</span>
 					</div>
 				{/if}
 				{#if selectedSession}
-					<span class="text-gray-500 dark:text-gray-400">Session: <span class="font-mono text-gray-900 dark:text-white">{selectedSession.name}</span></span>
+					<span class="text-slate-500">Session: <span class="font-mono text-vanna-navy">{selectedSession.name}</span></span>
 				{:else if showGlobalTerminal}
-					<span class="text-gray-500 dark:text-gray-400">Global Terminal</span>
+					<span class="text-slate-500">Global Terminal</span>
 				{/if}
 			</div>
 		</Card>
@@ -396,16 +396,16 @@
 			<!-- Task Sessions -->
 			{#if taskSessions.length > 0}
 				<div>
-					<h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-						<svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<h2 class="text-xl font-semibold text-vanna-navy mb-4 flex items-center gap-2">
+						<svg class="w-6 h-6 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
 						</svg>
 						Task Sessions ({taskSessions.length})
 					</h2>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 						{#each taskSessions as session}
-							<Card 
-								class="card-hover cursor-pointer border-yellow-200 dark:border-yellow-800 hover:border-yellow-400 dark:hover:border-yellow-600"
+							<Card
+								class="card-hover cursor-pointer border-vanna-orange/30 hover:border-vanna-orange/60"
 								onclick={() => {
 									if (session.execution_id) {
 										goto(`/task-executions/${session.execution_id}`);
@@ -415,22 +415,22 @@
 								}}
 							>
 								<div class="flex items-center justify-between mb-3">
-									<div class="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+									<div class="flex items-center gap-2 text-vanna-orange">
 										{@html getSessionTypeIcon(session)}
 										<span class="font-mono text-sm">{session.name}</span>
 									</div>
-									<span class="text-xs text-gray-500 dark:text-gray-400">{formatTime(session.created)}</span>
+									<span class="text-xs text-slate-500">{formatTime(session.created)}</span>
 								</div>
-								<div class="text-sm text-gray-600 dark:text-gray-300 mb-3 space-y-1">
-									<div>Task: <span class="text-gray-900 dark:text-white font-mono">{session.task_name || `ID: ${session.task_id}`}</span></div>
-									<div>Agent: <span class="text-gray-900 dark:text-white font-mono">{session.agent_name || `ID: ${session.agent_id}`}</span></div>
+								<div class="text-sm text-slate-500 mb-3 space-y-1">
+									<div>Task: <span class="text-vanna-navy font-mono">{session.task_name || `ID: ${session.task_id}`}</span></div>
+									<div>Agent: <span class="text-vanna-navy font-mono">{session.agent_name || `ID: ${session.agent_id}`}</span></div>
 									{#if session.execution_id}
-										<div class="text-xs text-blue-600 dark:text-blue-400 font-medium">
+										<div class="text-xs text-vanna-teal font-medium">
 											→ Click to view task execution
 										</div>
 									{/if}
 								</div>
-								<div class="terminal-preview bg-gray-900 dark:bg-black rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
+								<div class="terminal-preview bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
 									<pre class="whitespace-pre font-mono" style="margin: 0;">{@html session.preview}</pre>
 								</div>
 								<div class="mt-3 flex justify-between items-center">
@@ -462,26 +462,26 @@
 			<!-- Regular Sessions -->
 			{#if regularSessions.length > 0}
 				<div>
-					<h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-						<svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<h2 class="text-xl font-semibold text-vanna-navy mb-4 flex items-center gap-2">
+						<svg class="w-6 h-6 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
 						</svg>
 						Regular Sessions ({regularSessions.length})
 					</h2>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 						{#each regularSessions as session}
-							<Card 
+							<Card
 								class="card-hover cursor-pointer"
 								onclick={() => attachToSession(session)}
 							>
 								<div class="flex items-center justify-between mb-3">
-									<div class="flex items-center gap-2 text-green-600 dark:text-green-400">
+									<div class="flex items-center gap-2 text-vanna-teal">
 										{@html getSessionTypeIcon(session)}
 										<span class="font-mono text-sm">{session.name}</span>
 									</div>
-									<span class="text-xs text-gray-500 dark:text-gray-400">{formatTime(session.created)}</span>
+									<span class="text-xs text-slate-500">{formatTime(session.created)}</span>
 								</div>
-								<div class="terminal-preview bg-gray-900 dark:bg-black rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
+								<div class="terminal-preview bg-gray-900 rounded p-2 text-xs font-mono text-gray-300 h-32 overflow-y-auto overflow-x-auto scrollbar-hide" style="scroll-behavior: smooth;">
 									<pre class="whitespace-pre font-mono" style="margin: 0;">{@html session.preview}</pre>
 								</div>
 								<div class="mt-3 flex justify-end">
@@ -497,16 +497,18 @@
 
 			{#if loading}
 				<Card class="text-center py-12">
-					<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-					<p class="text-gray-600 dark:text-gray-400">Loading tmux sessions...</p>
+					<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-vanna-teal mx-auto mb-4"></div>
+					<p class="text-slate-500">Loading tmux sessions...</p>
 				</Card>
 			{:else if sessions.length === 0}
 				<Card class="text-center py-12">
-					<svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
-					</svg>
-					<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Active Sessions</h3>
-					<p class="text-gray-600 dark:text-gray-400 mb-6">No tmux sessions are currently running.</p>
+					<div class="w-16 h-16 bg-vanna-teal/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+						<svg class="w-8 h-8 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
+						</svg>
+					</div>
+					<h3 class="text-xl font-semibold text-vanna-navy mb-2">No Active Sessions</h3>
+					<p class="text-slate-500 mb-6">No tmux sessions are currently running.</p>
 					<Button onclick={showGlobal} variant="primary">
 						Start Global Terminal
 					</Button>

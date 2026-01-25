@@ -42,7 +42,7 @@
 	async function deleteTaskExecution(executionId) {
 		if (deletingExecutions.has(executionId)) return;
 		
-		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n• Kill all associated tmux sessions\n• Remove the worktree directory\n• Run teardown commands\n• Delete all related data\n\nThis action cannot be undone.`);
+		const confirmed = confirm(`Are you sure you want to delete this task execution? This will:\n\n• Kill all associated tmux sessions\n• Run teardown commands\n• Delete all related data\n\nThis action cannot be undone.`);
 		
 		if (!confirmed) return;
 		
@@ -124,13 +124,13 @@
 
 	function getColumnColor(status) {
 		const colors = {
-			pending: 'border-gray-300 dark:border-gray-600',
-			running: 'border-blue-300 dark:border-blue-600',
-			waiting: 'border-yellow-300 dark:border-yellow-600',
-			completed: 'border-green-300 dark:border-green-600',
-			failed: 'border-red-300 dark:border-red-600'
+			pending: 'border-slate-300',
+			running: 'border-vanna-magenta',
+			waiting: 'border-vanna-orange',
+			completed: 'border-vanna-teal',
+			failed: 'border-vanna-orange'
 		};
-		return colors[status] || 'border-gray-300 dark:border-gray-600';
+		return colors[status] || 'border-slate-300';
 	}
 </script>
 
@@ -142,15 +142,15 @@
 	<!-- Page Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Task Executions</h1>
-			<p class="mt-2 text-gray-600 dark:text-gray-400">Track and manage task executions and workflows</p>
+			<h1 class="text-3xl font-bold text-vanna-navy font-serif">Task Executions</h1>
+			<p class="mt-2 text-slate-500">Track and manage task executions and workflows</p>
 		</div>
 		<div class="flex items-center space-x-3">
 			<!-- View Toggle -->
-			<div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+			<div class="flex items-center bg-vanna-cream/50 rounded-lg p-1">
 				<button
 					onclick={() => viewMode = 'kanban'}
-					class="px-3 py-1 text-sm font-medium rounded-md transition-colors {viewMode === 'kanban' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
+					class="px-3 py-1 text-sm font-medium rounded-md transition-colors {viewMode === 'kanban' ? 'bg-white text-vanna-navy shadow-sm' : 'text-slate-500 hover:text-vanna-navy'}"
 				>
 					<svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
@@ -159,7 +159,7 @@
 				</button>
 				<button
 					onclick={() => viewMode = 'list'}
-					class="px-3 py-1 text-sm font-medium rounded-md transition-colors {viewMode === 'list' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
+					class="px-3 py-1 text-sm font-medium rounded-md transition-colors {viewMode === 'list' ? 'bg-white text-vanna-navy shadow-sm' : 'text-slate-500 hover:text-vanna-navy'}"
 				>
 					<svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
@@ -181,58 +181,58 @@
 		<Card class="p-4">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<div class="w-8 h-8 bg-vanna-navy/10 rounded-lg flex items-center justify-center">
+						<svg class="w-4 h-4 text-vanna-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 						</svg>
 					</div>
 				</div>
 				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Tasks</p>
-					<p class="text-lg font-semibold text-gray-900 dark:text-white">{totalTasks}</p>
+					<p class="text-sm font-medium text-slate-500">Total Tasks</p>
+					<p class="text-lg font-semibold text-vanna-navy">{totalTasks}</p>
 				</div>
 			</div>
 		</Card>
 		<Card class="p-4">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<div class="w-8 h-8 bg-vanna-teal/10 rounded-lg flex items-center justify-center">
+						<svg class="w-4 h-4 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
 						</svg>
 					</div>
 				</div>
 				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
-					<p class="text-lg font-semibold text-gray-900 dark:text-white">{completedTasks}</p>
+					<p class="text-sm font-medium text-slate-500">Completed</p>
+					<p class="text-lg font-semibold text-vanna-navy">{completedTasks}</p>
 				</div>
 			</div>
 		</Card>
 		<Card class="p-4">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-						<div class="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse"></div>
+					<div class="w-8 h-8 bg-vanna-magenta/10 rounded-lg flex items-center justify-center">
+						<div class="w-2 h-2 bg-vanna-magenta rounded-full animate-pulse"></div>
 					</div>
 				</div>
 				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-600 dark:text-gray-400">Running</p>
-					<p class="text-lg font-semibold text-gray-900 dark:text-white">{runningTasks}</p>
+					<p class="text-sm font-medium text-slate-500">Running</p>
+					<p class="text-lg font-semibold text-vanna-navy">{runningTasks}</p>
 				</div>
 			</div>
 		</Card>
 		<Card class="p-4">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
-					<div class="w-8 h-8 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<div class="w-8 h-8 bg-vanna-orange/10 rounded-lg flex items-center justify-center">
+						<svg class="w-4 h-4 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
 						</svg>
 					</div>
 				</div>
 				<div class="ml-3">
-					<p class="text-sm font-medium text-gray-600 dark:text-gray-400">Waiting</p>
-					<p class="text-lg font-semibold text-gray-900 dark:text-white">{waitingTasks}</p>
+					<p class="text-sm font-medium text-slate-500">Waiting</p>
+					<p class="text-lg font-semibold text-vanna-navy">{waitingTasks}</p>
 				</div>
 			</div>
 		</Card>
@@ -241,17 +241,17 @@
 	<!-- Task Content -->
 	{#if loading}
 		<div class="flex items-center justify-center py-12">
-			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-vanna-teal"></div>
 		</div>
 	{:else if taskExecutions.length === 0}
 		<Card class="text-center py-12">
-			<div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
-				<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<div class="w-16 h-16 bg-vanna-teal/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+				<svg class="w-8 h-8 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 				</svg>
 			</div>
-			<h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Task Executions Yet</h3>
-			<p class="text-gray-600 dark:text-gray-400 mb-4">Execute tasks from the Projects page to see executions here</p>
+			<h3 class="text-xl font-semibold text-vanna-navy mb-2">No Task Executions Yet</h3>
+			<p class="text-slate-500 mb-4">Execute tasks from the Projects page to see executions here</p>
 			<Button href="/projects" variant="primary">
 				Go to Projects
 			</Button>
@@ -262,7 +262,7 @@
 			{#each Object.entries(kanbanColumns) as [status, tasks]}
 				<div class="flex flex-col">
 					<div class="flex items-center justify-between mb-4 pb-2 border-b-2 {getColumnColor(status)}">
-						<h3 class="font-semibold text-gray-900 dark:text-white">{getColumnTitle(status)}</h3>
+						<h3 class="font-semibold text-vanna-navy">{getColumnTitle(status)}</h3>
 						{#if status === 'waiting' && tasks.length > 0}
 							<Badge variant="warning" size="sm">Needs Attention</Badge>
 						{/if}
@@ -276,8 +276,8 @@
 							/>
 						{/each}
 						{#if tasks.length === 0}
-							<div class="flex items-center justify-center h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-								<p class="text-sm text-gray-500 dark:text-gray-400">No {status} tasks</p>
+							<div class="flex items-center justify-center h-32 border-2 border-dashed border-slate-300 rounded-lg">
+								<p class="text-sm text-slate-500">No {status} tasks</p>
 							</div>
 						{/if}
 					</div>
@@ -288,21 +288,21 @@
 		<!-- List View -->
 		<Card>
 			<div class="overflow-hidden">
-				<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-					<thead class="bg-gray-50 dark:bg-gray-800">
+				<table class="min-w-full divide-y divide-slate-200">
+					<thead class="bg-vanna-cream/30">
 						<tr>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Task</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Agent</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Agent</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Created</th>
 							<th class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
 						</tr>
 					</thead>
-					<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+					<tbody class="bg-white divide-y divide-slate-200">
 						{#each taskExecutions as execution}
 							<tr class="table-row">
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm font-medium text-gray-900 dark:text-white">
+									<div class="text-sm font-medium text-vanna-navy">
 										{execution.task_title || `Task ${execution.task_id}`}
 									</div>
 								</td>
@@ -311,10 +311,10 @@
 										{execution.status || 'Unknown'}
 									</Badge>
 								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
 									{execution.agent_name || `Agent ${execution.agent_id}`}
 								</td>
-								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
 									{execution.created_at ? new Date(execution.created_at).toLocaleDateString() : 'Recently'}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">

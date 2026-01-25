@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'ghost';
+		variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'ghost' | 'outline';
 		size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 		disabled?: boolean;
 		loading?: boolean;
@@ -22,24 +22,25 @@
 		children
 	}: Props = $props();
 
-	const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+	const baseClasses = 'inline-flex items-center justify-center font-medium rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 	const variantClasses = {
-		primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
-		secondary: 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500',
-		success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
-		danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
-		warning: 'bg-yellow-600 hover:bg-yellow-700 text-white focus:ring-yellow-500',
-		info: 'bg-cyan-600 hover:bg-cyan-700 text-white focus:ring-cyan-500',
-		ghost: 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-gray-500'
+		primary: 'bg-vanna-teal hover:bg-vanna-teal/90 text-white shadow-vanna-subtle focus:ring-vanna-teal',
+		secondary: 'bg-vanna-cream hover:bg-vanna-cream/80 text-vanna-navy border border-vanna-teal/30 focus:ring-vanna-teal',
+		success: 'bg-vanna-teal hover:bg-vanna-teal/90 text-white focus:ring-vanna-teal',
+		danger: 'bg-vanna-orange hover:bg-vanna-orange/90 text-white focus:ring-vanna-orange',
+		warning: 'bg-vanna-orange hover:bg-vanna-orange/90 text-white focus:ring-vanna-orange',
+		info: 'bg-vanna-teal hover:bg-vanna-teal/90 text-white focus:ring-vanna-teal',
+		ghost: 'bg-transparent hover:bg-vanna-cream/50 text-vanna-navy focus:ring-vanna-teal',
+		outline: 'border border-vanna-navy/30 bg-transparent hover:bg-vanna-cream/30 text-vanna-navy focus:ring-vanna-teal'
 	};
 
 	const sizeClasses = {
-		xs: 'px-2.5 py-1.5 text-xs',
-		sm: 'px-3 py-2 text-sm',
-		md: 'px-4 py-2 text-sm',
-		lg: 'px-4 py-2 text-base',
-		xl: 'px-6 py-3 text-base'
+		xs: 'px-2.5 py-1.5 text-xs h-7',
+		sm: 'px-3 py-2 text-sm h-9',
+		md: 'px-4 py-2 text-sm h-11',
+		lg: 'px-4 py-2 text-base h-12',
+		xl: 'px-6 py-3 text-base h-14'
 	};
 
 	const classes = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;

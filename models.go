@@ -23,22 +23,14 @@ type Project struct {
 
 // BaseDirectory represents a base directory configuration
 type BaseDirectory struct {
+	ID                        int64  `json:"id"`
 	BaseDirectoryId           string `yaml:"base_directory_id" json:"base_directory_id"`
 	Path                      string `yaml:"path" json:"path"`
 	GitInitialized            bool   `yaml:"git_initialized" json:"git_initialized"`
-	WorktreeSetupCommands     string `yaml:"worktree_setup_commands" json:"worktree_setup_commands"`
-	WorktreeTeardownCommands  string `yaml:"worktree_teardown_commands" json:"worktree_teardown_commands"`
+	SetupCommands             string `yaml:"setup_commands" json:"setup_commands"`
+	TeardownCommands          string `yaml:"teardown_commands" json:"teardown_commands"`
 	DevServerSetupCommands    string `yaml:"dev_server_setup_commands" json:"dev_server_setup_commands"`
 	DevServerTeardownCommands string `yaml:"dev_server_teardown_commands" json:"dev_server_teardown_commands"`
-}
-
-// Worktree represents a worktree instance
-type Worktree struct {
-	BaseDirectoryId string  `yaml:"base_directory_id" json:"base_directory_id"`
-	Path            string  `yaml:"path" json:"path"`
-	AgentTmuxId     *string `yaml:"-" json:"agent_tmux_id,omitempty"`
-	DevServerTmuxId *string `yaml:"-" json:"dev_server_tmux_id,omitempty"`
-	ExternalUrl     *string `yaml:"-" json:"external_url,omitempty"`
 }
 
 // Task represents a task configuration
@@ -50,13 +42,15 @@ type Task struct {
 	BaseDirectory   BaseDirectory `json:"baseDirectory"`
 }
 
-// TaskExecution represents a task being executed by an agent in a worktree
+// TaskExecution represents a task being executed by an agent
 type TaskExecution struct {
-	ID        int64    `json:"id"`
-	TaskID    int64    `json:"taskId"`
-	Status    string   `json:"status"`
-	Agent     Agent    `json:"agent"`
-	Worktree  Worktree `json:"worktree"`
+	ID                int64   `json:"id"`
+	TaskID            int64   `json:"taskId"`
+	Status            string  `json:"status"`
+	Agent             Agent   `json:"agent"`
+	AgentTmuxId       *string `json:"agent_tmux_id,omitempty"`
+	DevServerTmuxId   *string `json:"dev_server_tmux_id,omitempty"`
+	BaseDirectoryPath string  `json:"base_directory_path"`
 }
 
 // Agent represents an available agent
@@ -94,35 +88,14 @@ func dbRootToRoot(dbRoot db.Root, agents []db.Agent, projects []Project) Root {
 
 func dbBaseDirectoryToBaseDirectory(dbBaseDir db.BaseDirectory) BaseDirectory {
 	return BaseDirectory{
+		ID:                        dbBaseDir.ID,
 		BaseDirectoryId:           dbBaseDir.BaseDirectoryID,
 		Path:                      dbBaseDir.Path,
 		GitInitialized:            dbBaseDir.GitInitialized,
-		WorktreeSetupCommands:     dbBaseDir.WorktreeSetupCommands,
-		WorktreeTeardownCommands:  dbBaseDir.WorktreeTeardownCommands,
+		SetupCommands:             dbBaseDir.SetupCommands,
+		TeardownCommands:          dbBaseDir.TeardownCommands,
 		DevServerSetupCommands:    dbBaseDir.DevServerSetupCommands,
 		DevServerTeardownCommands: dbBaseDir.DevServerTeardownCommands,
-	}
-}
-
-func dbWorktreeToWorktree(dbWorktree db.Worktree) Worktree {
-	var agentTmuxId, devServerTmuxId, externalUrl *string
-	
-	if dbWorktree.AgentTmuxID.Valid {
-		agentTmuxId = &dbWorktree.AgentTmuxID.String
-	}
-	if dbWorktree.DevServerTmuxID.Valid {
-		devServerTmuxId = &dbWorktree.DevServerTmuxID.String
-	}
-	if dbWorktree.ExternalUrl.Valid {
-		externalUrl = &dbWorktree.ExternalUrl.String
-	}
-
-	return Worktree{
-		BaseDirectoryId: dbWorktree.BaseDirectoryID,
-		Path:            dbWorktree.Path,
-		AgentTmuxId:     agentTmuxId,
-		DevServerTmuxId: devServerTmuxId,
-		ExternalUrl:     externalUrl,
 	}
 }
 
@@ -142,4 +115,11 @@ func stringToNullString(s *string) sql.NullString {
 		return sql.NullString{Valid: false}
 	}
 	return sql.NullString{String: *s, Valid: true}
+}
+
+func nullStringToString(ns sql.NullString) string {
+	if ns.Valid {
+		return ns.String
+	}
+	return ""
 }

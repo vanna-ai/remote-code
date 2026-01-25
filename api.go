@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"remote-code/db"
@@ -112,8 +111,8 @@ func getGitStatus(dir string) (*GitStatus, int, string, error) {
 		return nil, 1, short, err
 	}
 
-	// Files via porcelain -z
-	porcelain, _, err := runGit(dir, "status", "--porcelain=1", "-z")
+	// Files via porcelain -z, with -u to show individual files in untracked directories
+	porcelain, _, err := runGit(dir, "status", "--porcelain=1", "-z", "-u")
 	if err != nil {
 		return nil, 1, porcelain, err
 	}
@@ -210,15 +209,26 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 		}
 		file := r.URL.Query().Get("file")
 		staged := r.URL.Query().Get("staged") == "true"
-		args := []string{"diff"}
-		if staged {
-			args = append(args, "--staged")
+		untracked := r.URL.Query().Get("untracked") == "true"
+
+		var args []string
+		if untracked && file != "" {
+			// For untracked files, use --no-index to compare against /dev/null
+			// This shows the entire file as additions
+			args = []string{"diff", "--no-index", "/dev/null", file}
+		} else {
+			args = []string{"diff"}
+			if staged {
+				args = append(args, "--staged")
+			}
+			if file != "" {
+				args = append(args, "--", file)
+			}
 		}
-		if file != "" {
-			args = append(args, "--", file)
-		}
-		out, _, err := runGit(dir, args...)
-		if err != nil {
+
+		out, code, err := runGit(dir, args...)
+		// For --no-index, exit code 1 means differences found (which is expected)
+		if err != nil && !(untracked && code == 1) {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "output": out})
 			return
@@ -336,31 +346,32 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 		var body struct {
-			Path   string `json:"path"`
-			Branch string `json:"branch"`
-			TaskID int64  `json:"taskId"`
+			Path    string `json:"path"`
+			Branch  string `json:"branch"`
+			TaskID  int64  `json:"taskId"`
+			AgentID int64  `json:"agentId"` // Agent ID of the winning execution for ELO
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON: requires branch"})
 			return
 		}
-		worktreeDir := body.Path
-		if worktreeDir == "" {
+		gitDir := body.Path
+		if gitDir == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
 			return
 		}
 
-		// Resolve base repository path from any worktree dir via git-common-dir
-		commonDirOut, _, err := runGit(worktreeDir, "rev-parse", "--git-common-dir")
+		// Resolve base repository path
+		commonDirOut, _, err := runGit(gitDir, "rev-parse", "--git-common-dir")
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Not a git repo"})
 			return
 		}
-		gitDir := strings.TrimSpace(commonDirOut)
-		basePath := filepath.Dir(gitDir)
+		resolvedGitDir := strings.TrimSpace(commonDirOut)
+		basePath := filepath.Dir(resolvedGitDir)
 
 		// Step 1: Ensure we are on main
 		headOut, _, err := runGit(basePath, "symbolic-ref", "--quiet", "--short", "HEAD")
@@ -432,22 +443,17 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 
 		// Record ELO competition for the merged execution (winner) vs all other executions
 		eloStatus := "skipped"
-		if body.TaskID != 0 {
-			// Find the execution being merged by worktree path
-			if mergedExecution, err := queries.GetTaskExecutionByWorktreePath(ctx, worktreeDir); err == nil {
-				// Process ELO competitions with the merged execution as winner
-				eloCalc := NewELOCalculator(queries)
-				if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, mergedExecution.AgentID); err == nil {
-					if result.TotalCompetitions > 0 {
-						eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
-					} else {
-						eloStatus = "no competitions created"
-					}
+		if body.TaskID != 0 && body.AgentID != 0 {
+			// Process ELO competitions with the specified agent as winner
+			eloCalc := NewELOCalculator(queries)
+			if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, body.AgentID); err == nil {
+				if result.TotalCompetitions > 0 {
+					eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
 				} else {
-					eloStatus = fmt.Sprintf("elo error: %v", err)
+					eloStatus = "no competitions created"
 				}
 			} else {
-				eloStatus = fmt.Sprintf("execution not found: %v", err)
+				eloStatus = fmt.Sprintf("elo error: %v", err)
 			}
 		}
 
@@ -841,8 +847,6 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleAgentsAPI(w, r, ctx, pathParts[1:])
 	case "base-directories":
 		handleBaseDirectoriesAPI(w, r, ctx, pathParts[1:])
-	case "worktrees":
-		handleWorktreesAPI(w, r, ctx, pathParts[1:])
 	case "tasks":
 		handleTasksAPI(w, r, ctx, pathParts[1:])
 	case "task-executions":
@@ -904,66 +908,62 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 			executions, err := queries.ListTaskExecutions(ctx)
 			if err == nil {
 				stats.TaskExecutions = len(executions)
-				
-				// Check each execution for git changes awaiting review and waiting status
+
+				// Check each execution for agents waiting for input
 				for _, execution := range executions {
-					// Get task details
-					task, taskErr := queries.GetTask(ctx, execution.TaskID)
-					if taskErr != nil {
-						continue
-					}
-					
-					// Get agent details
-					agent, agentErr := queries.GetAgent(ctx, execution.AgentID)
-					if agentErr != nil {
-						continue
-					}
-					
-					// Get worktree details for both status and git checks
-					worktree, worktreeErr := queries.GetWorktree(ctx, execution.WorktreeID)
-					if worktreeErr != nil {
-						continue
-					}
-					
 					summary := TaskExecutionSummary{
 						ID:       execution.ID,
 						TaskID:   execution.TaskID,
-						TaskName: task.Title,
-						Agent:    agent.Name,
+						TaskName: execution.TaskTitle,
+						Agent:    execution.AgentName,
 						Status:   execution.Status,
 					}
-					
+
 					// Skip rejected executions from dashboard sections
 					if execution.Status == "rejected" {
 						continue
 					}
-					
+
 					// Check if agent is waiting for user input
 					// First check stored status
 					isWaiting := execution.Status == "Waiting" || execution.Status == "waiting"
-					
+
 					// If running, check real-time session status to detect waiting
 					if !isWaiting && (execution.Status == "running" || execution.Status == "Running") {
-						if worktree.AgentTmuxID.Valid {
-							realTimeStatus := determineTaskExecutionStatus(worktree.AgentTmuxID.String)
+						if execution.AgentTmuxID.Valid {
+							realTimeStatus := determineTaskExecutionStatus(execution.AgentTmuxID.String)
 							if realTimeStatus == "Waiting" {
 								isWaiting = true
 								summary.Status = "Waiting" // Update displayed status
 							}
 						}
 					}
-					
+
 					if isWaiting {
 						stats.AgentsWaitingForInput = append(stats.AgentsWaitingForInput, summary)
 					}
-					
-					// Check for git changes awaiting review (has uncommitted changes but running/completed)
-					gitStatus, _, _, gitErr := getGitStatus(worktree.Path)
+				}
+			}
+
+			// Git changes are now tracked per base directory, not per task execution
+			// Get all base directories and check their git status (reuse projects list from above)
+			for _, project := range projects {
+				baseDirs, bdErr := queries.GetBaseDirectoriesByProjectID(ctx, project.ID)
+				if bdErr != nil {
+					continue
+				}
+				for _, baseDir := range baseDirs {
+					gitStatus, _, _, gitErr := getGitStatus(baseDir.Path)
 					if gitErr == nil && gitStatus != nil && gitStatus.IsDirty {
-						// Has git changes - check if it's completed or running
-						if execution.Status == "completed" || execution.Status == "running" {
-							stats.GitChangesAwaitingReview = append(stats.GitChangesAwaitingReview, summary)
+						// Has uncommitted changes in this directory
+						summary := TaskExecutionSummary{
+							ID:       baseDir.ID,
+							TaskID:   0,
+							TaskName: baseDir.Path,
+							Agent:    gitStatus.CurrentBranch,
+							Status:   "dirty",
 						}
+						stats.GitChangesAwaitingReview = append(stats.GitChangesAwaitingReview, summary)
 					}
 				}
 			}
@@ -1690,6 +1690,45 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		return
 	}
 
+	// Handle sub-endpoints like /api/task-executions/{id}/dev-server
+	if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
+		executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+			return
+		}
+
+		queries := db.New(database)
+
+		switch r.Method {
+		case "POST":
+			// Start dev server for task execution
+			err = startDevServerForExecution(ctx, queries, executionID)
+			if err != nil {
+				log.Printf("Failed to start dev server: %v", err)
+				http.Error(w, "Failed to start dev server", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]string{"status": "dev server started"})
+			return
+
+		case "DELETE":
+			// Stop dev server for task execution
+			err = stopDevServerForExecution(ctx, queries, executionID)
+			if err != nil {
+				log.Printf("Failed to stop dev server: %v", err)
+				http.Error(w, "Failed to stop dev server", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]string{"status": "dev server stopped"})
+			return
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
 	switch r.Method {
 	case "DELETE":
 		// Handle task execution deletion
@@ -1841,29 +1880,24 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 			return
 		}
 
-		// Create a unique worktree path for this execution
-		worktreePath := fmt.Sprintf("/tmp/task_%d_agent_%d_%d", createReq.TaskId, createReq.AgentId, time.Now().Unix())
-
-		// Create the worktree
-		dbWorktree, err := queries.CreateWorktree(ctx, db.CreateWorktreeParams{
+		// Get the base directory
+		dbBaseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+			ProjectID:       dbTask.ProjectID,
 			BaseDirectoryID: dbTask.BaseDirectoryID,
-			Path:            worktreePath,
-			AgentTmuxID:     sql.NullString{Valid: false},
-			DevServerTmuxID: sql.NullString{Valid: false},
-			ExternalUrl:     sql.NullString{Valid: false},
 		})
 		if err != nil {
-			log.Printf("Failed to create worktree: %v", err)
-			http.Error(w, "Failed to create worktree", http.StatusInternalServerError)
+			log.Printf("Failed to get base directory: %v", err)
+			http.Error(w, "Base directory not found", http.StatusNotFound)
 			return
 		}
 
-		// Create the task execution record
+		// Create the task execution record (no worktree - runs directly in base directory)
 		dbTaskExecution, err := queries.CreateTaskExecution(ctx, db.CreateTaskExecutionParams{
-			TaskID:     createReq.TaskId,
-			AgentID:    createReq.AgentId,
-			WorktreeID: dbWorktree.ID,
-			Status:     "starting",
+			TaskID:          createReq.TaskId,
+			AgentID:         createReq.AgentId,
+			Status:          "starting",
+			AgentTmuxID:     sql.NullString{Valid: false},
+			DevServerTmuxID: sql.NullString{Valid: false},
 		})
 		if err != nil {
 			log.Printf("Failed to create task execution: %v", err)
@@ -1885,15 +1919,15 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		}
 
 		// Start the execution in the background
-		go startTaskExecutionProcess(dbTaskExecution.ID, dbTask, dbAgent, dbWorktree)
+		go startTaskExecutionProcess(dbTaskExecution.ID, dbTask, dbAgent, dbBaseDir)
 
 		// Return the task execution details
 		result := map[string]interface{}{
-			"id":          dbTaskExecution.ID,
-			"task_id":     dbTaskExecution.TaskID,
-			"agent_id":    dbTaskExecution.AgentID,
-			"worktree_id": dbTaskExecution.WorktreeID,
-			"status":      dbTaskExecution.Status,
+			"id":                  dbTaskExecution.ID,
+			"task_id":             dbTaskExecution.TaskID,
+			"agent_id":            dbTaskExecution.AgentID,
+			"base_directory_path": dbBaseDir.Path,
+			"status":              dbTaskExecution.Status,
 		}
 		json.NewEncoder(w).Encode(result)
 
@@ -1902,52 +1936,31 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 	}
 }
 
-func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, worktree db.Worktree) {
+func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, baseDir db.BaseDirectory) {
 	ctx := context.Background()
 
-	log.Printf("Starting task execution %d: Task '%s' with agent '%s'", executionID, task.Title, agent.Name)
-
-	// Get the base directory for setup commands
-	baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
-		ProjectID:       task.ProjectID,
-		BaseDirectoryID: worktree.BaseDirectoryID,
-	})
-	if err != nil {
-		log.Printf("Failed to get base directory: %v", err)
-		updateTaskExecutionStatus(ctx, executionID, "failed")
-		return
-	}
-
-	// Create the worktree directory
-	err = os.MkdirAll(worktree.Path, 0755)
-	if err != nil {
-		log.Printf("Failed to create worktree directory %s: %v", worktree.Path, err)
-		updateTaskExecutionStatus(ctx, executionID, "failed")
-		return
-	}
+	log.Printf("Starting task execution %d: Task '%s' with agent '%s' in %s", executionID, task.Title, agent.Name, baseDir.Path)
 
 	// Generate a unique tmux session name
 	sessionName := fmt.Sprintf("task_%d_agent_%d", task.ID, agent.ID)
 
-	// Start tmux session in the worktree directory
-	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktree.Path)
-	err = tmuxCmd.Run()
+	// Start tmux session in the base directory
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", baseDir.Path)
+	err := tmuxCmd.Run()
 	if err != nil {
 		log.Printf("Failed to start tmux session: %v", err)
 		updateTaskExecutionStatus(ctx, executionID, "failed")
 		return
 	}
 
-	// Update worktree with tmux session info
-	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
-		ID:              worktree.ID,
-		Path:            worktree.Path,
+	// Update task execution with tmux session info
+	_, err = queries.UpdateTaskExecutionTmux(ctx, db.UpdateTaskExecutionTmuxParams{
+		ID:              executionID,
 		AgentTmuxID:     sql.NullString{String: sessionName, Valid: true},
-		DevServerTmuxID: worktree.DevServerTmuxID,
-		ExternalUrl:     worktree.ExternalUrl,
+		DevServerTmuxID: sql.NullString{Valid: false},
 	})
 	if err != nil {
-		log.Printf("Failed to update worktree with tmux session: %v", err)
+		log.Printf("Failed to update task execution with tmux session: %v", err)
 	}
 
 	// Function to send command and wait
@@ -1964,26 +1977,9 @@ func startTaskExecutionProcess(executionID int64, task db.Task, agent db.Agent, 
 		return nil
 	}
 
-	// Run git worktree setup if this is a git-initialized base directory
-	if baseDir.GitInitialized {
-		// Set up git worktree
-		worktreeCommand := fmt.Sprintf("git worktree add %s", worktree.Path)
-		// Change to base directory first, then set up worktree
-		if err := sendCommandAndWait(fmt.Sprintf("cd %s", baseDir.Path), "change to base directory"); err != nil {
-			log.Printf("Warning: %v", err)
-		}
-		if err := sendCommandAndWait(worktreeCommand, "git worktree setup"); err != nil {
-			log.Printf("Warning: %v", err)
-		}
-		// Change back to worktree directory
-		if err := sendCommandAndWait(fmt.Sprintf("cd %s", worktree.Path), "change to worktree directory"); err != nil {
-			log.Printf("Warning: %v", err)
-		}
-	}
-
-	// Run custom worktree setup commands if provided
-	if baseDir.WorktreeSetupCommands != "" {
-		if err := sendCommandAndWait(baseDir.WorktreeSetupCommands, "worktree setup commands"); err != nil {
+	// Run custom setup commands if provided
+	if baseDir.SetupCommands != "" {
+		if err := sendCommandAndWait(baseDir.SetupCommands, "setup commands"); err != nil {
 			log.Printf("Warning: %v", err)
 		}
 	}
@@ -2077,27 +2073,19 @@ func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx contex
 	}
 
 	// Get the task execution to find the tmux session
-	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	execution, err := queries.GetTaskExecution(ctx, executionID)
 	if err != nil {
 		log.Printf("Failed to get task execution: %v", err)
 		http.Error(w, "Task execution not found", http.StatusNotFound)
 		return
 	}
 
-	// Get the worktree to find the tmux session
-	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
-	if err != nil {
-		log.Printf("Failed to get worktree: %v", err)
-		http.Error(w, "Worktree not found", http.StatusNotFound)
-		return
-	}
-
-	if !worktree.AgentTmuxID.Valid {
+	if !execution.AgentTmuxID.Valid {
 		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
 		return
 	}
 
-	sessionName := worktree.AgentTmuxID.String
+	sessionName := execution.AgentTmuxID.String
 
 	// Send the input to the tmux session
 	log.Printf("Sending input to session %s: %s", sessionName, inputReq.Input)
@@ -2148,7 +2136,7 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 	}
 
 	// Get the task execution to find the task details and tmux session
-	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	execution, err := queries.GetTaskExecution(ctx, executionID)
 	if err != nil {
 		log.Printf("Failed to get task execution: %v", err)
 		http.Error(w, "Task execution not found", http.StatusNotFound)
@@ -2163,20 +2151,12 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 		return
 	}
 
-	// Get the worktree to find the tmux session
-	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
-	if err != nil {
-		log.Printf("Failed to get worktree: %v", err)
-		http.Error(w, "Worktree not found", http.StatusNotFound)
-		return
-	}
-
-	if !worktree.AgentTmuxID.Valid {
+	if !execution.AgentTmuxID.Valid {
 		http.Error(w, "No active tmux session for this task execution", http.StatusBadRequest)
 		return
 	}
 
-	sessionName := worktree.AgentTmuxID.String
+	sessionName := execution.AgentTmuxID.String
 
 	// Create the task prompt to send to the agent
 	taskPrompt := fmt.Sprintf("Task: %s\n\nDescription: %s", task.Title, task.Description)
@@ -2278,120 +2258,98 @@ func handleRejectTaskExecution(w http.ResponseWriter, r *http.Request, ctx conte
 }
 
 func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	json.NewEncoder(w).Encode(map[string]string{"message": "Base directories API not implemented yet"})
-}
-
-func handleWorktreesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	queries := db.New(database)
-
 	switch r.Method {
 	case "GET":
 		if len(pathParts) == 0 {
-			// List all worktrees - for now return empty array since no ListWorktrees method exists
-			json.NewEncoder(w).Encode([]db.Worktree{})
-		} else {
-			// Get specific worktree
-			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
+			// List all base directories
+			// For now, get them via projects
+			projects, err := queries.ListProjects(ctx)
 			if err != nil {
-				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
+				http.Error(w, "Failed to list projects", http.StatusInternalServerError)
 				return
 			}
 
-			worktree, err := queries.GetWorktree(ctx, worktreeID)
-			if err != nil {
-				log.Printf("Failed to get worktree: %v", err)
-				http.Error(w, "Worktree not found", http.StatusNotFound)
-				return
+			var allDirs []map[string]interface{}
+			for _, project := range projects {
+				dirs, err := queries.GetBaseDirectoriesByProjectID(ctx, project.ID)
+				if err != nil {
+					continue
+				}
+				for _, dir := range dirs {
+					allDirs = append(allDirs, map[string]interface{}{
+						"id":                           dir.ID,
+						"base_directory_id":            dir.BaseDirectoryID,
+						"project_id":                   dir.ProjectID,
+						"path":                         dir.Path,
+						"git_initialized":              dir.GitInitialized,
+						"setup_commands":               dir.SetupCommands,
+						"teardown_commands":            dir.TeardownCommands,
+						"dev_server_setup_commands":    dir.DevServerSetupCommands,
+						"dev_server_teardown_commands": dir.DevServerTeardownCommands,
+					})
+				}
 			}
-
-			json.NewEncoder(w).Encode(worktree)
+			json.NewEncoder(w).Encode(allDirs)
+			return
 		}
 
-	case "POST":
-		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
-		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
-			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
-				return
-			}
-
-			// Start dev server for worktree
-			err = startDevServer(ctx, queries, worktreeID)
-			if err != nil {
-				log.Printf("Failed to start dev server: %v", err)
-				http.Error(w, "Failed to start dev server", http.StatusInternalServerError)
-				return
-			}
-
-			json.NewEncoder(w).Encode(map[string]string{"status": "dev server started"})
-		} else {
-			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
+		// Get single base directory by internal ID
+		id, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid directory ID", http.StatusBadRequest)
+			return
 		}
 
-	case "DELETE":
-		// Handle sub-endpoints like /api/worktrees/{id}/dev-server
-		if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
-			worktreeID, err := strconv.ParseInt(pathParts[0], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid worktree ID", http.StatusBadRequest)
-				return
-			}
-
-			// Stop dev server for worktree
-			err = stopDevServer(ctx, queries, worktreeID)
-			if err != nil {
-				log.Printf("Failed to stop dev server: %v", err)
-				http.Error(w, "Failed to stop dev server", http.StatusInternalServerError)
-				return
-			}
-
-			json.NewEncoder(w).Encode(map[string]string{"status": "dev server stopped"})
-		} else {
-			http.Error(w, "Invalid endpoint", http.StatusBadRequest)
+		dir, err := queries.GetBaseDirectory(ctx, id)
+		if err != nil {
+			http.Error(w, "Base directory not found", http.StatusNotFound)
+			return
 		}
+
+		// Get the project name
+		project, _ := queries.GetProject(ctx, dir.ProjectID)
+		projectName := ""
+		if project.Name != "" {
+			projectName = project.Name
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":                           dir.ID,
+			"base_directory_id":            dir.BaseDirectoryID,
+			"project_id":                   dir.ProjectID,
+			"project_name":                 projectName,
+			"path":                         dir.Path,
+			"git_initialized":              dir.GitInitialized,
+			"setup_commands":               dir.SetupCommands,
+			"teardown_commands":            dir.TeardownCommands,
+			"dev_server_setup_commands":    dir.DevServerSetupCommands,
+			"dev_server_teardown_commands": dir.DevServerTeardownCommands,
+		})
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) error {
-	worktree, err := queries.GetWorktree(ctx, worktreeID)
+// Dev server functions for task executions
+func startDevServerForExecution(ctx context.Context, queries *db.Queries, executionID int64) error {
+	// Get task execution with details
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
 	if err != nil {
 		return err
 	}
 
-	// We need to get the task to find dev server setup commands
-	// First, let's get the task execution to find the task_id
-	executions, err := queries.ListTaskExecutions(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list task executions: %v", err)
-	}
-
-	var taskID int64
-	for _, exec := range executions {
-		if exec.WorktreeID == worktreeID {
-			taskID = exec.TaskID
-			break
-		}
-	}
-
-	if taskID == 0 {
-		return fmt.Errorf("no task found for worktree %d", worktreeID)
-	}
-
-	// Get task with base directory info to access dev server setup commands
-	taskWithBaseDir, err := queries.GetTaskWithBaseDirectory(ctx, taskID)
+	// Get task with base directory info for dev server setup commands
+	taskWithBaseDir, err := queries.GetTaskWithBaseDirectory(ctx, execution.TaskID)
 	if err != nil {
 		return fmt.Errorf("failed to get task with base directory: %v", err)
 	}
 
 	// Create dev server session name
-	devSessionName := fmt.Sprintf("dev_%d", worktreeID)
+	devSessionName := fmt.Sprintf("dev_%d", executionID)
 
-	// Start tmux session for dev server in the worktree directory
-	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", devSessionName, "-c", worktree.Path)
+	// Start tmux session for dev server in the base directory
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", devSessionName, "-c", execution.BaseDirectoryPath)
 	err = tmuxCmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to create dev server tmux session: %v", err)
@@ -2407,10 +2365,7 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 			// Don't return error here, session is still created
 		}
 
-		// Add a separator and info message
-		infoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "", "Enter")
-		infoCmd.Run()
-
+		// Add info message
 		echoCmd := exec.Command("tmux", "send-keys", "-t", devSessionName, "echo 'Dev server started. Session: "+devSessionName+"'", "Enter")
 		echoCmd.Run()
 	} else {
@@ -2422,37 +2377,34 @@ func startDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) 
 		bashCmd.Run()
 	}
 
-	// Update worktree with dev server session info
-	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
-		ID:              worktree.ID,
-		Path:            worktree.Path,
-		AgentTmuxID:     worktree.AgentTmuxID,
+	// Update task execution with dev server session info
+	_, err = queries.UpdateTaskExecutionTmux(ctx, db.UpdateTaskExecutionTmuxParams{
+		ID:              executionID,
+		AgentTmuxID:     execution.AgentTmuxID,
 		DevServerTmuxID: sql.NullString{String: devSessionName, Valid: true},
-		ExternalUrl:     worktree.ExternalUrl,
 	})
 
 	return err
 }
 
-func stopDevServer(ctx context.Context, queries *db.Queries, worktreeID int64) error {
-	worktree, err := queries.GetWorktree(ctx, worktreeID)
+func stopDevServerForExecution(ctx context.Context, queries *db.Queries, executionID int64) error {
+	// Get task execution
+	execution, err := queries.GetTaskExecution(ctx, executionID)
 	if err != nil {
 		return err
 	}
 
-	if worktree.DevServerTmuxID.Valid {
+	if execution.DevServerTmuxID.Valid {
 		// Kill the tmux session
-		tmuxCmd := exec.Command("tmux", "kill-session", "-t", worktree.DevServerTmuxID.String)
+		tmuxCmd := exec.Command("tmux", "kill-session", "-t", execution.DevServerTmuxID.String)
 		_ = tmuxCmd.Run() // Ignore error if session doesn't exist
 	}
 
-	// Update worktree to remove dev server session info
-	_, err = queries.UpdateWorktree(ctx, db.UpdateWorktreeParams{
-		ID:              worktree.ID,
-		Path:            worktree.Path,
-		AgentTmuxID:     worktree.AgentTmuxID,
+	// Update task execution to remove dev server session info
+	_, err = queries.UpdateTaskExecutionTmux(ctx, db.UpdateTaskExecutionTmuxParams{
+		ID:              executionID,
+		AgentTmuxID:     execution.AgentTmuxID,
 		DevServerTmuxID: sql.NullString{Valid: false},
-		ExternalUrl:     worktree.ExternalUrl,
 	})
 
 	return err
@@ -2672,8 +2624,10 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 		var createReq struct {
 			Path                      string `json:"path"`
 			GitInitialized            bool   `json:"gitInitialized"`
-			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
-			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
+			SetupCommands             string `json:"setupCommands"`
+			TeardownCommands          string `json:"teardownCommands"`
+			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`     // Legacy support
+			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`  // Legacy support
 			DevServerSetupCommands    string `json:"devServerSetupCommands"`
 			DevServerTeardownCommands string `json:"devServerTeardownCommands"`
 		}
@@ -2681,6 +2635,16 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 		if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
+		}
+
+		// Support legacy field names
+		setupCommands := createReq.SetupCommands
+		if setupCommands == "" {
+			setupCommands = createReq.WorktreeSetupCommands
+		}
+		teardownCommands := createReq.TeardownCommands
+		if teardownCommands == "" {
+			teardownCommands = createReq.WorktreeTeardownCommands
 		}
 
 		// Generate a unique base directory ID
@@ -2691,8 +2655,8 @@ func handleProjectBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx
 			BaseDirectoryID:           baseDirectoryID,
 			Path:                      createReq.Path,
 			GitInitialized:            createReq.GitInitialized,
-			WorktreeSetupCommands:     createReq.WorktreeSetupCommands,
-			WorktreeTeardownCommands:  createReq.WorktreeTeardownCommands,
+			SetupCommands:             setupCommands,
+			TeardownCommands:          teardownCommands,
 			DevServerSetupCommands:    createReq.DevServerSetupCommands,
 			DevServerTeardownCommands: createReq.DevServerTeardownCommands,
 		})
@@ -2752,8 +2716,10 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 		var updateReq struct {
 			Path                      string `json:"path"`
 			GitInitialized            bool   `json:"gitInitialized"`
-			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`
-			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`
+			SetupCommands             string `json:"setupCommands"`
+			TeardownCommands          string `json:"teardownCommands"`
+			WorktreeSetupCommands     string `json:"worktreeSetupCommands"`     // Legacy support
+			WorktreeTeardownCommands  string `json:"worktreeTeardownCommands"`  // Legacy support
 			DevServerSetupCommands    string `json:"devServerSetupCommands"`
 			DevServerTeardownCommands string `json:"devServerTeardownCommands"`
 		}
@@ -2762,12 +2728,22 @@ func handleSingleBaseDirectoryAPI(w http.ResponseWriter, r *http.Request, ctx co
 			return
 		}
 
+		// Support legacy field names
+		setupCommands := updateReq.SetupCommands
+		if setupCommands == "" {
+			setupCommands = updateReq.WorktreeSetupCommands
+		}
+		teardownCommands := updateReq.TeardownCommands
+		if teardownCommands == "" {
+			teardownCommands = updateReq.WorktreeTeardownCommands
+		}
+
 		updated, err := queries.UpdateBaseDirectory(ctx, db.UpdateBaseDirectoryParams{
 			ID:                        existing.ID,
 			Path:                      updateReq.Path,
 			GitInitialized:            updateReq.GitInitialized,
-			WorktreeSetupCommands:     updateReq.WorktreeSetupCommands,
-			WorktreeTeardownCommands:  updateReq.WorktreeTeardownCommands,
+			SetupCommands:             setupCommands,
+			TeardownCommands:          teardownCommands,
 			DevServerSetupCommands:    updateReq.DevServerSetupCommands,
 			DevServerTeardownCommands: updateReq.DevServerTeardownCommands,
 		})
@@ -2824,49 +2800,24 @@ func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) erro
 		return fmt.Errorf("failed to get task execution details: %v", err)
 	}
 
-	// Get worktree details
-	worktree, err := queries.GetWorktree(ctx, execution.WorktreeID)
+	// Perform tmux session cleanup using task execution's tmux IDs
+	cleanupTmuxSessionsFromExecution(execution)
+
+	// Get task details to find project ID for teardown commands
+	task, err := queries.GetTask(ctx, execution.TaskID)
 	if err != nil {
-		log.Printf("Warning: failed to get worktree details: %v", err)
-		// Continue with cleanup even if we can't get worktree details
+		log.Printf("Warning: failed to get task details: %v", err)
 	} else {
-		// Perform tmux session cleanup
-		err = cleanupTmuxSessions(worktree)
+		// Get base directory for teardown commands
+		baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+			ProjectID:       task.ProjectID,
+			BaseDirectoryID: execution.BaseDirectoryID,
+		})
 		if err != nil {
-			log.Printf("Warning: failed to cleanup tmux sessions: %v", err)
-		}
-
-		// Get task details to find project ID
-		task, err := queries.GetTask(ctx, execution.TaskID)
-		if err != nil {
-			log.Printf("Warning: failed to get task details: %v", err)
+			log.Printf("Warning: failed to get base directory for teardown commands: %v", err)
 		} else {
-			// Get base directory for teardown commands
-			baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
-				ProjectID:       task.ProjectID,
-				BaseDirectoryID: execution.BaseDirectoryID,
-			})
-			if err != nil {
-				log.Printf("Warning: failed to get base directory for teardown commands: %v", err)
-			} else {
-				// Run teardown commands
-				err = runTeardownCommands(worktree, baseDir)
-				if err != nil {
-					log.Printf("Warning: failed to run teardown commands: %v", err)
-				}
-
-				// Cleanup filesystem
-				err = cleanupWorktreeDirectory(worktree, baseDir)
-				if err != nil {
-					log.Printf("Warning: failed to cleanup worktree directory: %v", err)
-				}
-			}
-		}
-
-		// Delete worktree record from database
-		err = queries.DeleteWorktree(ctx, worktree.ID)
-		if err != nil {
-			log.Printf("Warning: failed to delete worktree from database: %v", err)
+			// Run teardown commands in base directory
+			runTeardownCommandsInDir(baseDir)
 		}
 	}
 
@@ -2880,75 +2831,48 @@ func deleteTaskExecutionWithCleanup(ctx context.Context, executionID int64) erro
 	return nil
 }
 
-func cleanupTmuxSessions(worktree db.Worktree) error {
+func cleanupTmuxSessionsFromExecution(execution db.GetTaskExecutionWithDetailsRow) {
 	// Kill agent tmux session if it exists
-	if worktree.AgentTmuxID.Valid && worktree.AgentTmuxID.String != "" {
-		log.Printf("Killing agent tmux session: %s", worktree.AgentTmuxID.String)
-		cmd := exec.Command("tmux", "kill-session", "-t", worktree.AgentTmuxID.String)
+	if execution.AgentTmuxID.Valid && execution.AgentTmuxID.String != "" {
+		log.Printf("Killing agent tmux session: %s", execution.AgentTmuxID.String)
+		cmd := exec.Command("tmux", "kill-session", "-t", execution.AgentTmuxID.String)
 		err := cmd.Run()
 		if err != nil {
-			log.Printf("Warning: failed to kill agent tmux session %s: %v", worktree.AgentTmuxID.String, err)
+			log.Printf("Warning: failed to kill agent tmux session %s: %v", execution.AgentTmuxID.String, err)
 		}
 	}
 
 	// Kill dev server tmux session if it exists
-	if worktree.DevServerTmuxID.Valid && worktree.DevServerTmuxID.String != "" {
-		log.Printf("Killing dev server tmux session: %s", worktree.DevServerTmuxID.String)
-		cmd := exec.Command("tmux", "kill-session", "-t", worktree.DevServerTmuxID.String)
+	if execution.DevServerTmuxID.Valid && execution.DevServerTmuxID.String != "" {
+		log.Printf("Killing dev server tmux session: %s", execution.DevServerTmuxID.String)
+		cmd := exec.Command("tmux", "kill-session", "-t", execution.DevServerTmuxID.String)
 		err := cmd.Run()
 		if err != nil {
-			log.Printf("Warning: failed to kill dev server tmux session %s: %v", worktree.DevServerTmuxID.String, err)
+			log.Printf("Warning: failed to kill dev server tmux session %s: %v", execution.DevServerTmuxID.String, err)
 		}
 	}
-
-	return nil
 }
 
-func runTeardownCommands(worktree db.Worktree, baseDir db.BaseDirectory) error {
+func runTeardownCommandsInDir(baseDir db.BaseDirectory) {
 	// Run dev server teardown commands if they exist
 	if baseDir.DevServerTeardownCommands != "" {
 		log.Printf("Running dev server teardown commands: %s", baseDir.DevServerTeardownCommands)
-		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", worktree.Path, baseDir.DevServerTeardownCommands))
+		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", baseDir.Path, baseDir.DevServerTeardownCommands))
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("Warning: dev server teardown commands failed: %v, output: %s", err, string(output))
 		}
 	}
 
-	// Run worktree teardown commands if they exist
-	if baseDir.WorktreeTeardownCommands != "" {
-		log.Printf("Running worktree teardown commands: %s", baseDir.WorktreeTeardownCommands)
-		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", worktree.Path, baseDir.WorktreeTeardownCommands))
+	// Run teardown commands if they exist
+	if baseDir.TeardownCommands != "" {
+		log.Printf("Running teardown commands: %s", baseDir.TeardownCommands)
+		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", baseDir.Path, baseDir.TeardownCommands))
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("Warning: worktree teardown commands failed: %v, output: %s", err, string(output))
+			log.Printf("Warning: teardown commands failed: %v, output: %s", err, string(output))
 		}
 	}
-
-	return nil
-}
-
-func cleanupWorktreeDirectory(worktree db.Worktree, baseDir db.BaseDirectory) error {
-	// If this was a git worktree, remove it from git first
-	if baseDir.GitInitialized {
-		log.Printf("Removing git worktree: %s", worktree.Path)
-
-		// Change to base directory and remove the git worktree
-		cmd := exec.Command("bash", "-c", fmt.Sprintf("cd %s && git worktree remove --force %s", baseDir.Path, worktree.Path))
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("Warning: failed to remove git worktree: %v, output: %s", err, string(output))
-		}
-	}
-
-	// Remove the worktree directory from filesystem
-	log.Printf("Removing worktree directory: %s", worktree.Path)
-	err := os.RemoveAll(worktree.Path)
-	if err != nil {
-		return fmt.Errorf("failed to remove worktree directory %s: %v", worktree.Path, err)
-	}
-
-	return nil
 }
 
 func handleCompetitionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

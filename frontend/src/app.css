@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,11 +7,11 @@
 @layer base {
   html {
     @apply scroll-smooth;
-    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    font-family: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
   }
-  
+
   body {
-    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased;
+    @apply bg-white text-vanna-navy antialiased;
   }
 
   /* Scrollbar styling */
@@ -21,41 +20,46 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-gray-100 dark:bg-gray-800;
+    @apply bg-slate-100;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+    @apply bg-slate-300 rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400 dark:bg-gray-500;
+    @apply bg-vanna-teal/50;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm;
+    @apply bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-vanna-card;
   }
-  
+
   .card-hover {
-    @apply hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200;
+    @apply hover:shadow-vanna-feature hover:-translate-y-1 transition-all duration-200;
   }
-  
+
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800;
+    @apply bg-vanna-teal hover:bg-vanna-teal/90 text-white font-medium py-2 px-4 rounded-full shadow-vanna-subtle transition-colors focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:ring-offset-2;
   }
-  
+
   .btn-secondary {
-    @apply bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800;
+    @apply bg-vanna-cream hover:bg-vanna-cream/80 text-vanna-navy font-medium py-2 px-4 rounded-full border border-vanna-teal/30 transition-colors focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:ring-offset-2;
   }
-  
+
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors;
+    @apply w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-vanna-navy placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:border-transparent transition-colors;
   }
-  
+
   .table-row {
-    @apply border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors;
+    @apply border-b border-slate-200 hover:bg-vanna-cream/30 transition-colors;
+  }
+
+  /* Glass morphism utility */
+  .glass {
+    @apply backdrop-blur-sm bg-white/60;
   }
 
   /* Custom scrollbar for terminal previews */
@@ -63,7 +67,7 @@
     /* Firefox */
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     /* Webkit browsers (Chrome, Safari, Edge) */
     display: none;
@@ -80,5 +84,29 @@
 
   .slide-in-from-left {
     @apply animate-in slide-in-from-left duration-300;
+  }
+
+  /* Brand gradient utilities */
+  .text-gradient {
+    @apply bg-gradient-to-r from-vanna-navy via-vanna-teal to-vanna-navy bg-clip-text text-transparent;
+  }
+
+  .bg-gradient-brand {
+    @apply bg-gradient-to-br from-white/90 via-vanna-cream/80 to-vanna-teal/15;
+  }
+
+  .bg-gradient-cream {
+    @apply bg-gradient-to-b from-vanna-cream via-white to-vanna-cream;
+  }
+
+  /* Decorative accent line */
+  .accent-line {
+    @apply bg-gradient-to-r from-transparent via-vanna-teal to-transparent h-px;
+  }
+
+  /* Dot pattern background */
+  .dot-pattern {
+    background-image: radial-gradient(circle at 2px 2px, rgba(2,61,96,0.3) 1px, transparent 0);
+    background-size: 32px 32px;
   }
 }

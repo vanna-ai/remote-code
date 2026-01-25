@@ -13,12 +13,12 @@ WHERE project_id = ?
 ORDER BY title;
 
 -- name: GetTaskWithBaseDirectory :one
-SELECT 
+SELECT
     t.*,
     bd.path as base_directory_path,
     bd.git_initialized,
-    bd.worktree_setup_commands,
-    bd.worktree_teardown_commands,
+    bd.setup_commands,
+    bd.teardown_commands,
     bd.dev_server_setup_commands,
     bd.dev_server_teardown_commands
 FROM tasks t

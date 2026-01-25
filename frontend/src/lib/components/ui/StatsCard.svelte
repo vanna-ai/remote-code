@@ -3,7 +3,7 @@
 		title: string;
 		value: string | number;
 		icon: string;
-		color?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'yellow';
+		color?: 'teal' | 'orange' | 'magenta' | 'navy' | 'green' | 'purple';
 		trend?: {
 			value: number;
 			isPositive: boolean;
@@ -16,42 +16,42 @@
 		title,
 		value,
 		icon,
-		color = 'blue',
+		color = 'teal',
 		trend,
 		href,
 		loading = false
 	}: Props = $props();
 
 	const colorClasses = {
-		blue: {
-			bg: 'bg-blue-500',
-			text: 'text-blue-600',
-			lightBg: 'bg-blue-50 dark:bg-blue-900/20'
+		teal: {
+			bg: 'bg-vanna-teal',
+			text: 'text-vanna-teal',
+			lightBg: 'bg-vanna-teal/10'
+		},
+		orange: {
+			bg: 'bg-vanna-orange',
+			text: 'text-vanna-orange',
+			lightBg: 'bg-vanna-orange/10'
+		},
+		magenta: {
+			bg: 'bg-vanna-magenta',
+			text: 'text-vanna-magenta',
+			lightBg: 'bg-vanna-magenta/10'
+		},
+		navy: {
+			bg: 'bg-vanna-navy',
+			text: 'text-vanna-navy',
+			lightBg: 'bg-vanna-navy/10'
 		},
 		green: {
 			bg: 'bg-green-500',
 			text: 'text-green-600',
-			lightBg: 'bg-green-50 dark:bg-green-900/20'
+			lightBg: 'bg-green-50'
 		},
 		purple: {
 			bg: 'bg-purple-500',
 			text: 'text-purple-600',
-			lightBg: 'bg-purple-50 dark:bg-purple-900/20'
-		},
-		orange: {
-			bg: 'bg-orange-500',
-			text: 'text-orange-600',
-			lightBg: 'bg-orange-50 dark:bg-orange-900/20'
-		},
-		red: {
-			bg: 'bg-red-500',
-			text: 'text-red-600',
-			lightBg: 'bg-red-50 dark:bg-red-900/20'
-		},
-		yellow: {
-			bg: 'bg-yellow-500',
-			text: 'text-yellow-600',
-			lightBg: 'bg-yellow-50 dark:bg-yellow-900/20'
+			lightBg: 'bg-purple-50'
 		}
 	};
 
@@ -73,7 +73,7 @@
 <svelte:element
 	this={Component}
 	{href}
-	class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-all duration-200 {href ? 'hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer' : ''}"
+	class="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-6 shadow-vanna-card hover:shadow-vanna-feature hover:-translate-y-1 transition-all duration-200 {href ? 'cursor-pointer' : ''}"
 >
 	<div class="flex items-center">
 		<div class="flex-shrink-0">
@@ -86,17 +86,17 @@
 		<div class="ml-4 flex-1">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</p>
-					<p class="text-2xl font-bold text-gray-900 dark:text-white">
+					<p class="text-sm font-medium text-slate-500">{title}</p>
+					<p class="text-2xl font-bold text-vanna-navy">
 						{#if loading}
-							<div class="animate-pulse bg-gray-300 dark:bg-gray-600 h-8 w-16 rounded"></div>
+							<div class="animate-pulse bg-slate-200 h-8 w-16 rounded"></div>
 						{:else}
 							{value}
 						{/if}
 					</p>
 				</div>
 				{#if trend}
-					<div class="flex items-center text-sm {trend.isPositive ? 'text-green-600' : 'text-red-600'}">
+					<div class="flex items-center text-sm {trend.isPositive ? 'text-vanna-teal' : 'text-vanna-orange'}">
 						<svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
 							{#if trend.isPositive}
 								<path fill-rule="evenodd" d="M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />

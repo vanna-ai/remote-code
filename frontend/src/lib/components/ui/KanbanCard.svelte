@@ -9,7 +9,6 @@
 			status?: string;
 			agent_name?: string;
 			agent_id?: number;
-			worktree_id?: number;
 			created_at?: string;
 		};
 		onDelete?: (id: number) => void;
@@ -34,7 +33,7 @@
 		const date = new Date(dateString);
 		const now = new Date();
 		const diffInMinutes = Math.floor((now - date) / (1000 * 60));
-		
+
 		if (diffInMinutes < 1) return 'Just now';
 		if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
 		if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
@@ -44,40 +43,40 @@
 	let showDropdown = $state(false);
 </script>
 
-<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm hover:shadow-md transition-all duration-200 group">
+<div class="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-4 shadow-vanna-card hover:shadow-vanna-feature hover:-translate-y-1 transition-all duration-200 group">
 	<div class="flex items-start justify-between mb-3">
-		<h4 class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2">
+		<h4 class="text-sm font-medium text-vanna-navy line-clamp-2">
 			{task.task_title || `Task ${task.task_id}`}
 		</h4>
 		<div class="relative">
 			<button
 				onclick={() => showDropdown = !showDropdown}
-				class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+				class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-vanna-cream/50"
 			>
-				<svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+				<svg class="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
 					<path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
 				</svg>
 			</button>
-			
+
 			{#if showDropdown}
-				<div class="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+				<div class="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-vanna-card border border-slate-200/60 z-10">
 					<div class="py-1">
-						<a href="/task-executions/{task.id}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+						<a href="/task-executions/{task.id}" class="block px-4 py-2 text-sm text-vanna-navy hover:bg-vanna-cream/50">
 							View Details
 						</a>
 						{#if onStatusChange}
-							<button onclick={() => onStatusChange?.(task.id, 'pending')} class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+							<button onclick={() => onStatusChange?.(task.id, 'pending')} class="block w-full text-left px-4 py-2 text-sm text-vanna-navy hover:bg-vanna-cream/50">
 								Mark as Pending
 							</button>
-							<button onclick={() => onStatusChange?.(task.id, 'running')} class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+							<button onclick={() => onStatusChange?.(task.id, 'running')} class="block w-full text-left px-4 py-2 text-sm text-vanna-navy hover:bg-vanna-cream/50">
 								Mark as Running
 							</button>
-							<button onclick={() => onStatusChange?.(task.id, 'completed')} class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+							<button onclick={() => onStatusChange?.(task.id, 'completed')} class="block w-full text-left px-4 py-2 text-sm text-vanna-navy hover:bg-vanna-cream/50">
 								Mark as Completed
 							</button>
 						{/if}
 						{#if onDelete}
-							<button onclick={() => onDelete?.(task.id)} class="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+							<button onclick={() => onDelete?.(task.id)} class="block w-full text-left px-4 py-2 text-sm text-vanna-orange hover:bg-vanna-cream/50">
 								Delete Task
 							</button>
 						{/if}
@@ -88,14 +87,14 @@
 	</div>
 
 	<div class="space-y-2 mb-3">
-		<div class="flex items-center text-xs text-gray-500 dark:text-gray-400">
+		<div class="flex items-center text-xs text-slate-500">
 			<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
 			</svg>
 			{task.agent_name || `Agent ${task.agent_id}`}
 		</div>
 		{#if task.created_at}
-			<div class="flex items-center text-xs text-gray-500 dark:text-gray-400">
+			<div class="flex items-center text-xs text-slate-500">
 				<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
 				</svg>
@@ -123,9 +122,9 @@
 			{/if}
 			{task.status || 'Unknown'}
 		</Badge>
-		
+
 		{#if task.status?.toLowerCase() === 'waiting'}
-			<a href="/task-executions/{task.id}" class="text-xs text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300 font-medium">
+			<a href="/task-executions/{task.id}" class="text-xs text-vanna-orange hover:text-vanna-orange/80 font-medium">
 				Check Session
 			</a>
 		{/if}

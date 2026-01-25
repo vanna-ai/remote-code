@@ -38,33 +38,33 @@
 </script>
 
 {#if open}
-	<div 
-		class="fixed inset-0 z-50 overflow-y-auto" 
-		role="dialog" 
+	<div
+		class="fixed inset-0 z-50 overflow-y-auto"
+		role="dialog"
 		aria-modal="true"
 		on:keydown={handleKeydown}
 	>
 		<!-- Backdrop -->
-		<div 
-			class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+		<div
+			class="fixed inset-0 bg-vanna-navy/50 backdrop-blur-sm transition-opacity"
 			on:click={handleBackdropClick}
 		></div>
-		
+
 		<!-- Modal container -->
 		<div class="flex min-h-full items-center justify-center p-4">
 			<div class="relative w-full {sizeClasses[size]} transform transition-all">
 				<!-- Modal content -->
-				<div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 {className}">
+				<div class="relative bg-white rounded-2xl shadow-vanna-feature border border-slate-200/60 {className}">
 					{#if title}
 						<!-- Header -->
-						<div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-							<h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+						<div class="flex items-center justify-between p-6 border-b border-slate-200">
+							<h3 class="text-xl font-semibold text-vanna-navy font-serif">
 								{title}
 							</h3>
 							{#if onClose}
 								<button
 									type="button"
-									class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-2 transition-colors"
+									class="text-slate-400 hover:text-vanna-navy hover:bg-vanna-cream/50 rounded-lg p-2 transition-colors"
 									on:click={onClose}
 									aria-label="Close modal"
 								>
@@ -75,7 +75,7 @@
 							{/if}
 						</div>
 					{/if}
-					
+
 					<!-- Content -->
 					<div class="p-6">
 						{@render children?.()}

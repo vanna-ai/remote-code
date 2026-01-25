@@ -1,11 +1,11 @@
 -- name: CreateBaseDirectory :one
 INSERT INTO base_directories (
-    project_id, 
-    base_directory_id, 
-    path, 
+    project_id,
+    base_directory_id,
+    path,
     git_initialized,
-    worktree_setup_commands,
-    worktree_teardown_commands,
+    setup_commands,
+    teardown_commands,
     dev_server_setup_commands,
     dev_server_teardown_commands
 )
@@ -27,11 +27,11 @@ ORDER BY base_directory_id;
 
 -- name: UpdateBaseDirectory :one
 UPDATE base_directories
-SET 
+SET
     path = ?,
     git_initialized = ?,
-    worktree_setup_commands = ?,
-    worktree_teardown_commands = ?,
+    setup_commands = ?,
+    teardown_commands = ?,
     dev_server_setup_commands = ?,
     dev_server_teardown_commands = ?,
     updated_at = CURRENT_TIMESTAMP

@@ -2,18 +2,20 @@
 	interface Props {
 		class?: string;
 		padding?: 'none' | 'sm' | 'md' | 'lg';
-		shadow?: 'none' | 'sm' | 'md' | 'lg';
+		shadow?: 'none' | 'sm' | 'md' | 'lg' | 'vanna';
 		border?: boolean;
-		rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+		rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+		hover?: boolean;
 		onclick?: () => void;
 	}
 
 	let {
 		class: className = '',
 		padding = 'md',
-		shadow = 'sm',
+		shadow = 'vanna',
 		border = true,
-		rounded = 'lg',
+		rounded = '2xl',
+		hover = false,
 		onclick,
 		children
 	}: Props = $props();
@@ -29,7 +31,8 @@
 		none: '',
 		sm: 'shadow-sm',
 		md: 'shadow-md',
-		lg: 'shadow-lg'
+		lg: 'shadow-lg',
+		vanna: 'shadow-vanna-card'
 	};
 
 	const roundedClasses = {
@@ -37,13 +40,16 @@
 		sm: 'rounded-sm',
 		md: 'rounded-md',
 		lg: 'rounded-lg',
-		xl: 'rounded-xl'
+		xl: 'rounded-xl',
+		'2xl': 'rounded-2xl'
 	};
+
+	const hoverClasses = hover ? 'hover:-translate-y-1 hover:shadow-vanna-feature transition-all duration-200 cursor-pointer' : '';
 </script>
 
 {#if onclick}
 <div
-	class="bg-white dark:bg-gray-800 {border ? 'border border-gray-200 dark:border-gray-700' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {className}"
+	class="bg-white/80 backdrop-blur-sm {border ? 'border border-slate-200/60' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {hoverClasses} {className}"
 	onclick={onclick}
 	role="button"
 	tabindex="0"
@@ -52,7 +58,7 @@
 </div>
 {:else}
 <div
-	class="bg-white dark:bg-gray-800 {border ? 'border border-gray-200 dark:border-gray-700' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {className}"
+	class="bg-white/80 backdrop-blur-sm {border ? 'border border-slate-200/60' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {hover ? hoverClasses : ''} {className}"
 >
 	{@render children?.()}
 </div>

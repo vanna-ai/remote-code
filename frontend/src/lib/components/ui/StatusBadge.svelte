@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		status: 'todo' | 'in_progress' | 'done' | 'running' | 'completed' | 'failed' | 'pending';
+		status: 'todo' | 'in_progress' | 'done' | 'running' | 'completed' | 'failed' | 'pending' | 'waiting' | 'starting';
 		size?: 'sm' | 'md' | 'lg';
 		variant?: 'dot' | 'solid' | 'outline';
 		class?: string;
@@ -16,66 +16,66 @@
 	const statusConfig = {
 		todo: {
 			label: 'To Do',
-			color: 'gray',
-			dotColor: 'bg-gray-500',
-			solidColor: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
-			outlineColor: 'border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300'
+			color: 'slate',
+			dotColor: 'bg-slate-400',
+			solidColor: 'bg-slate-100 text-slate-600',
+			outlineColor: 'border-slate-300 text-slate-600'
 		},
 		in_progress: {
 			label: 'In Progress',
-			color: 'blue',
-			dotColor: 'bg-blue-500',
-			solidColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-			outlineColor: 'border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300'
+			color: 'teal',
+			dotColor: 'bg-vanna-teal',
+			solidColor: 'bg-vanna-teal/10 text-vanna-teal',
+			outlineColor: 'border-vanna-teal/30 text-vanna-teal'
 		},
 		done: {
 			label: 'Done',
-			color: 'green',
-			dotColor: 'bg-green-500',
-			solidColor: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-			outlineColor: 'border-green-300 text-green-700 dark:border-green-600 dark:text-green-300'
+			color: 'teal',
+			dotColor: 'bg-vanna-teal',
+			solidColor: 'bg-vanna-teal/10 text-vanna-teal',
+			outlineColor: 'border-vanna-teal/30 text-vanna-teal'
 		},
 		running: {
 			label: 'Running',
-			color: 'yellow',
-			dotColor: 'bg-yellow-500',
-			solidColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
-			outlineColor: 'border-yellow-300 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300'
+			color: 'teal',
+			dotColor: 'bg-vanna-teal',
+			solidColor: 'bg-vanna-teal/10 text-vanna-teal',
+			outlineColor: 'border-vanna-teal/30 text-vanna-teal'
 		},
 		completed: {
 			label: 'Completed',
-			color: 'green',
-			dotColor: 'bg-green-500',
-			solidColor: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-			outlineColor: 'border-green-300 text-green-700 dark:border-green-600 dark:text-green-300'
+			color: 'teal',
+			dotColor: 'bg-vanna-teal',
+			solidColor: 'bg-vanna-teal/10 text-vanna-teal',
+			outlineColor: 'border-vanna-teal/30 text-vanna-teal'
 		},
 		failed: {
 			label: 'Failed',
-			color: 'red',
-			dotColor: 'bg-red-500',
-			solidColor: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-			outlineColor: 'border-red-300 text-red-700 dark:border-red-600 dark:text-red-300'
+			color: 'orange',
+			dotColor: 'bg-vanna-orange',
+			solidColor: 'bg-vanna-orange/10 text-vanna-orange',
+			outlineColor: 'border-vanna-orange/30 text-vanna-orange'
 		},
 		pending: {
 			label: 'Pending',
-			color: 'gray',
-			dotColor: 'bg-gray-400',
-			solidColor: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-			outlineColor: 'border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-400'
+			color: 'slate',
+			dotColor: 'bg-slate-400',
+			solidColor: 'bg-slate-100 text-slate-400',
+			outlineColor: 'border-slate-300 text-slate-400'
 		},
 		waiting: {
 			label: 'Waiting',
-			color: 'yellow',
-			dotColor: 'bg-yellow-400',
-			solidColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
-			outlineColor: 'border-yellow-300 text-yellow-700 dark:border-yellow-600 dark:text-yellow-300'
+			color: 'slate',
+			dotColor: 'bg-slate-400',
+			solidColor: 'bg-slate-100 text-slate-500',
+			outlineColor: 'border-slate-300 text-slate-500'
 		},
 		starting: {
 			label: 'Starting',
-			color: 'blue',
-			dotColor: 'bg-blue-400',
-			solidColor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-			outlineColor: 'border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300'
+			color: 'teal',
+			dotColor: 'bg-vanna-teal/70',
+			solidColor: 'bg-vanna-teal/10 text-vanna-teal',
+			outlineColor: 'border-vanna-teal/30 text-vanna-teal'
 		}
 	};
 
@@ -93,7 +93,7 @@
 
 	let config = $derived(statusConfig[status] || statusConfig.pending);
 	let baseClasses = $derived(`inline-flex items-center gap-1.5 rounded-full font-medium ${sizeClasses[size]}`);
-	
+
 	let variantClasses = $derived({
 		dot: `${config.solidColor}`,
 		solid: `${config.solidColor}`,

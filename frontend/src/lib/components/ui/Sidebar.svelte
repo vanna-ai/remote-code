@@ -12,9 +12,11 @@
 	interface Props {
 		collapsed?: boolean;
 		navItems: NavItem[];
+		mobileOpen?: boolean;
+		onCloseMobile?: () => void;
 	}
 
-	let { collapsed = false, navItems }: Props = $props();
+	let { collapsed = false, navItems, mobileOpen = false, onCloseMobile }: Props = $props();
 
 	function isActive(href: string): boolean {
 		return $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/');
@@ -32,42 +34,109 @@
 		};
 		return icons[iconName] || icons.dashboard;
 	}
+
+	function handleNavClick() {
+		// Close mobile menu when navigating
+		if (mobileOpen && onCloseMobile) {
+			onCloseMobile();
+		}
+	}
 </script>
 
-<aside class="fixed left-0 top-0 z-40 h-screen transition-transform {collapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
-	<div class="h-full px-3 py-4 overflow-y-auto">
-		<!-- Logo -->
-		<div class="flex items-center {collapsed ? 'justify-center' : 'pl-2.5'} mb-5">
-		<img src="https://remote-code.com/static/images/banner.svg" class="w-full" alt="Remote-Code Logo" />		</div>
+<!-- Mobile backdrop -->
+{#if mobileOpen}
+	<div
+		class="fixed inset-0 z-30 bg-vanna-navy/50 backdrop-blur-sm lg:hidden"
+		onclick={onCloseMobile}
+		onkeydown={(e) => e.key === 'Escape' && onCloseMobile?.()}
+		role="button"
+		tabindex="0"
+		aria-label="Close menu"
+	></div>
+{/if}
+
+<!-- Sidebar -->
+<aside
+	class="fixed left-0 top-0 z-40 h-screen transition-all duration-300 ease-in-out
+		{collapsed ? 'w-16' : 'w-64'}
+		bg-white/95 backdrop-blur-sm border-r border-slate-200 shadow-vanna-card
+		lg:translate-x-0
+		{mobileOpen ? 'translate-x-0' : '-translate-x-full'}"
+>
+	<div class="h-full flex flex-col">
+		<!-- Logo Section -->
+		<div class="flex items-center justify-between px-4 py-4 border-b border-slate-200/60">
+			{#if collapsed}
+				<div class="w-8 h-8 bg-vanna-teal rounded-lg flex items-center justify-center mx-auto">
+					<span class="text-white font-bold text-sm">R</span>
+				</div>
+			{:else}
+				<img src="https://remote-code.com/static/images/banner.svg" class="h-8" alt="Remote-Code Logo" />
+			{/if}
+
+			<!-- Mobile close button -->
+			<button
+				onclick={onCloseMobile}
+				class="lg:hidden p-1.5 text-slate-500 hover:text-vanna-navy hover:bg-vanna-cream/50 rounded-lg transition-colors"
+				aria-label="Close sidebar"
+			>
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
 
 		<!-- Navigation -->
-		<ul class="space-y-2 font-medium">
-			{#each navItems as item}
-				<li>
-					<a
-						href={item.href}
-						class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group {isActive(item.href) ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : ''}"
-					>
-						<svg
-							class="w-5 h-5 text-gray-500 transition duration-75 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white {isActive(item.href) ? 'text-blue-700 dark:text-blue-300' : ''}"
-							aria-hidden="true"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
+		<nav class="flex-1 px-3 py-4 overflow-y-auto">
+			<ul class="space-y-1">
+				{#each navItems || [] as item}
+					<li>
+						<a
+							href={item.href}
+							onclick={handleNavClick}
+							class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
+								{isActive(item.href)
+									? 'bg-vanna-teal text-white shadow-vanna-subtle'
+									: 'text-slate-600 hover:bg-vanna-cream/50 hover:text-vanna-navy'}"
 						>
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIcon(item.icon)} />
-						</svg>
-						{#if !collapsed}
-							<span class="ml-3">{item.label}</span>
-							{#if item.badge}
-								<span class="inline-flex items-center justify-center w-3 h-3 p-3 ml-3 text-sm font-medium text-blue-800 bg-blue-100 rounded-full dark:bg-blue-900 dark:text-blue-300">
-									{item.badge}
-								</span>
+							<svg
+								class="w-5 h-5 flex-shrink-0 transition-colors
+									{isActive(item.href) ? 'text-white' : 'text-slate-400 group-hover:text-vanna-teal'}"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIcon(item.icon)} />
+							</svg>
+							{#if !collapsed}
+								<span class="flex-1 font-medium text-sm">{item.label}</span>
+								{#if item.badge}
+									<span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 text-xs font-semibold rounded-full
+										{isActive(item.href)
+											? 'bg-white/20 text-white'
+											: 'bg-vanna-teal/10 text-vanna-teal'}">
+										{item.badge}
+									</span>
+								{/if}
 							{/if}
-						{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</nav>
+
+		<!-- Footer -->
+		<div class="px-3 py-4 border-t border-slate-200/60">
+			{#if !collapsed}
+				<div class="px-3 py-2 bg-vanna-cream/30 rounded-xl">
+					<p class="text-xs text-slate-500">Remote-Code v1.0.0</p>
+					<p class="text-xs text-vanna-teal">Connected</p>
+				</div>
+			{:else}
+				<div class="flex justify-center">
+					<div class="w-2 h-2 bg-vanna-teal rounded-full"></div>
+				</div>
+			{/if}
+		</div>
 	</div>
 </aside>
