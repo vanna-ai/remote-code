@@ -60,10 +60,13 @@ RETURNING *;
 SELECT
     te.*,
     t.title as task_title,
-    a.name as agent_name
+    a.name as agent_name,
+    p.id as project_id,
+    p.name as project_name
 FROM task_executions te
 JOIN tasks t ON te.task_id = t.id
 JOIN agents a ON te.agent_id = a.id
+JOIN projects p ON t.project_id = p.id
 ORDER BY te.created_at DESC;
 
 -- name: DeleteTaskExecution :exec

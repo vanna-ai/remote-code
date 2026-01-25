@@ -21,6 +21,9 @@
 	let pushing = false;
 	let stagingFile = null;
 	let unstagingFile = null;
+	let ignoringFile = null;
+	let tasks = [];
+	let selectedTaskIds = new Set();
 
 	$: breadcrumbSegments = [
 		{ label: "", href: "/", icon: "banner" },
@@ -45,6 +48,12 @@
 
 			// Fetch git status for this directory
 			await refreshGitStatus();
+
+			// Fetch tasks for this directory
+			const tasksResponse = await fetch(`/api/base-directories/${directoryId}/tasks`);
+			if (tasksResponse.ok) {
+				tasks = await tasksResponse.json();
+			}
 		} catch (err) {
 			console.error('Failed to load:', err);
 			error = err.message;
@@ -113,6 +122,32 @@
 			console.error('Failed to stage file:', err);
 		} finally {
 			stagingFile = null;
+		}
+	}
+
+	async function ignoreFile(file) {
+		ignoringFile = file.path;
+		try {
+			const response = await fetch('/api/git/gitignore', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					path: directory.path,
+					file: file.path
+				})
+			});
+			if (response.ok) {
+				await refreshGitStatus();
+				// Clear diff if viewing this file
+				if (selectedFile && selectedFile.path === file.path) {
+					selectedFile = null;
+					diffContent = '';
+				}
+			}
+		} catch (err) {
+			console.error('Failed to ignore file:', err);
+		} finally {
+			ignoringFile = null;
 		}
 	}
 
@@ -277,6 +312,37 @@
 	$: hasUnstagedChanges = gitStatus && ((gitStatus.unstagedFiles?.length || 0) + (gitStatus.untrackedFiles?.length || 0)) > 0;
 	$: hasStagedChanges = gitStatus && (gitStatus.stagedFiles?.length || 0) > 0;
 	$: canPush = gitStatus && gitStatus.ahead > 0;
+	$: nonDoneTasks = tasks.filter(t => t.status !== 'done');
+
+	function generateCommitMessage() {
+		const selected = tasks.filter(t => selectedTaskIds.has(t.id));
+		if (selected.length === 0) return '';
+
+		// Single task: title as subject, description as body
+		if (selected.length === 1) {
+			const t = selected[0];
+			return t.description ? `${t.title}\n\n${t.description}` : t.title;
+		}
+
+		// Multiple tasks: combine titles, then descriptions
+		const titles = selected.map(t => `- ${t.title}`).join('\n');
+		const descriptions = selected
+			.filter(t => t.description)
+			.map(t => `## ${t.title}\n${t.description}`)
+			.join('\n\n');
+
+		return descriptions ? `${titles}\n\n${descriptions}` : titles;
+	}
+
+	function toggleTaskSelection(taskId) {
+		if (selectedTaskIds.has(taskId)) {
+			selectedTaskIds.delete(taskId);
+		} else {
+			selectedTaskIds.add(taskId);
+		}
+		selectedTaskIds = selectedTaskIds; // Trigger reactivity
+		commitMessage = generateCommitMessage();
+	}
 </script>
 
 <svelte:head>
@@ -491,15 +557,24 @@
 												</span>
 												<span class="text-sm text-vanna-navy truncate">{file.path}</span>
 											</div>
-											<Button
-												variant="ghost"
-												size="xs"
-												onclick={(e) => { e.stopPropagation(); stageFile(file); }}
-												disabled={stagingFile === file.path}
-												class="opacity-0 group-hover:opacity-100"
-											>
-												{stagingFile === file.path ? '...' : 'Stage'}
-											</Button>
+											<div class="flex gap-1 opacity-0 group-hover:opacity-100">
+												<Button
+													variant="ghost"
+													size="xs"
+													onclick={(e) => { e.stopPropagation(); ignoreFile(file); }}
+													disabled={ignoringFile === file.path}
+												>
+													{ignoringFile === file.path ? '...' : 'Ignore'}
+												</Button>
+												<Button
+													variant="ghost"
+													size="xs"
+													onclick={(e) => { e.stopPropagation(); stageFile(file); }}
+													disabled={stagingFile === file.path}
+												>
+													{stagingFile === file.path ? '...' : 'Stage'}
+												</Button>
+											</div>
 										</div>
 									{/each}
 								</div>
@@ -525,6 +600,47 @@
 											</svg>
 											<span class="text-sm text-vanna-magenta">{file.path}</span>
 										</div>
+									{/each}
+								</div>
+							</Card>
+						{/if}
+
+						<!-- Link to Tasks -->
+						{#if nonDoneTasks.length > 0}
+							<Card>
+								<div class="flex items-center justify-between mb-4">
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+										</svg>
+										<h3 class="font-semibold text-vanna-navy">Link to Tasks</h3>
+										<span class="text-sm text-slate-500">({nonDoneTasks.length})</span>
+									</div>
+									{#if selectedTaskIds.size > 0}
+										<span class="text-xs bg-vanna-teal/10 text-vanna-teal px-2 py-0.5 rounded-full">
+											{selectedTaskIds.size} selected
+										</span>
+									{/if}
+								</div>
+
+								<div class="space-y-2 max-h-48 overflow-y-auto">
+									{#each nonDoneTasks as task}
+										<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer">
+											<input
+												type="checkbox"
+												checked={selectedTaskIds.has(task.id)}
+												on:change={() => toggleTaskSelection(task.id)}
+												class="rounded border-slate-300 text-vanna-teal focus:ring-vanna-teal"
+											/>
+											<span class="flex-1 text-sm text-vanna-navy truncate">{task.title}</span>
+											<span class="text-xs px-2 py-0.5 rounded-full {
+												task.status === 'in_progress' ? 'bg-vanna-teal/10 text-vanna-teal' :
+												task.status === 'todo' ? 'bg-slate-100 text-slate-600' :
+												'bg-vanna-cream/50 text-slate-500'
+											}">
+												{task.status === 'in_progress' ? 'In Progress' : task.status === 'todo' ? 'To Do' : task.status}
+											</span>
+										</label>
 									{/each}
 								</div>
 							</Card>

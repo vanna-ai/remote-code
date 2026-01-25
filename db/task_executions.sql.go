@@ -235,10 +235,13 @@ const listTaskExecutions = `-- name: ListTaskExecutions :many
 SELECT
     te.id, te.task_id, te.agent_id, te.status, te.agent_tmux_id, te.dev_server_tmux_id, te.created_at, te.updated_at,
     t.title as task_title,
-    a.name as agent_name
+    a.name as agent_name,
+    p.id as project_id,
+    p.name as project_name
 FROM task_executions te
 JOIN tasks t ON te.task_id = t.id
 JOIN agents a ON te.agent_id = a.id
+JOIN projects p ON t.project_id = p.id
 ORDER BY te.created_at DESC
 `
 
@@ -253,6 +256,8 @@ type ListTaskExecutionsRow struct {
 	UpdatedAt       sql.NullTime   `db:"updated_at" json:"updated_at"`
 	TaskTitle       string         `db:"task_title" json:"task_title"`
 	AgentName       string         `db:"agent_name" json:"agent_name"`
+	ProjectID       int64          `db:"project_id" json:"project_id"`
+	ProjectName     string         `db:"project_name" json:"project_name"`
 }
 
 func (q *Queries) ListTaskExecutions(ctx context.Context) ([]ListTaskExecutionsRow, error) {
@@ -275,6 +280,8 @@ func (q *Queries) ListTaskExecutions(ctx context.Context) ([]ListTaskExecutionsR
 			&i.UpdatedAt,
 			&i.TaskTitle,
 			&i.AgentName,
+			&i.ProjectID,
+			&i.ProjectName,
 		); err != nil {
 			return nil, err
 		}

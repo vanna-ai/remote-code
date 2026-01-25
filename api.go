@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"remote-code/db"
@@ -275,6 +276,43 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 
+	case "gitignore":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+			File string `json:"file"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON"})
+			return
+		}
+		if body.Path == "" || body.File == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path or file"})
+			return
+		}
+		gitignorePath := filepath.Join(body.Path, ".gitignore")
+		var content []byte
+		if existingContent, err := os.ReadFile(gitignorePath); err == nil {
+			content = existingContent
+		}
+		// Ensure we have a newline before appending if file doesn't end with one
+		if len(content) > 0 && content[len(content)-1] != '\n' {
+			content = append(content, '\n')
+		}
+		content = append(content, []byte(body.File+"\n")...)
+		if err := os.WriteFile(gitignorePath, content, 0644); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+
 	case "unstage":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -346,10 +384,9 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 		var body struct {
-			Path    string `json:"path"`
-			Branch  string `json:"branch"`
-			TaskID  int64  `json:"taskId"`
-			AgentID int64  `json:"agentId"` // Agent ID of the winning execution for ELO
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+			TaskID int64  `json:"taskId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Branch == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -441,22 +478,6 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 
-		// Record ELO competition for the merged execution (winner) vs all other executions
-		eloStatus := "skipped"
-		if body.TaskID != 0 && body.AgentID != 0 {
-			// Process ELO competitions with the specified agent as winner
-			eloCalc := NewELOCalculator(queries)
-			if result, err := eloCalc.ProcessTaskCompetitionsWithWinner(ctx, body.TaskID, body.AgentID); err == nil {
-				if result.TotalCompetitions > 0 {
-					eloStatus = fmt.Sprintf("recorded %d competitions", result.TotalCompetitions)
-				} else {
-					eloStatus = "no competitions created"
-				}
-			} else {
-				eloStatus = fmt.Sprintf("elo error: %v", err)
-			}
-		}
-
 		// Optionally update task status to done
 		taskStatus := "skipped"
 		if body.TaskID != 0 {
@@ -474,7 +495,6 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			"ok":         true,
 			"output":     mergeOut,
 			"taskStatus": taskStatus,
-			"eloStatus":  eloStatus,
 		})
 
 	case "push":
@@ -855,10 +875,6 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
 	case "git":
 		handleGitAPI(w, r, ctx, pathParts[1:])
-	case "competitions":
-		handleCompetitionsAPI(w, r, ctx, pathParts[1:])
-	case "elo":
-		handleELOAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -874,11 +890,13 @@ type DashboardStats struct {
 }
 
 type TaskExecutionSummary struct {
-	ID       int64  `json:"id"`
-	TaskID   int64  `json:"task_id"`
-	TaskName string `json:"task_name"`
-	Agent    string `json:"agent"`
-	Status   string `json:"status"`
+	ID          int64  `json:"id"`
+	TaskID      int64  `json:"task_id"`
+	TaskName    string `json:"task_name"`
+	Agent       string `json:"agent"`
+	Status      string `json:"status"`
+	ProjectID   int64  `json:"project_id"`
+	ProjectName string `json:"project_name"`
 }
 
 func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
@@ -912,11 +930,13 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				// Check each execution for agents waiting for input
 				for _, execution := range executions {
 					summary := TaskExecutionSummary{
-						ID:       execution.ID,
-						TaskID:   execution.TaskID,
-						TaskName: execution.TaskTitle,
-						Agent:    execution.AgentName,
-						Status:   execution.Status,
+						ID:          execution.ID,
+						TaskID:      execution.TaskID,
+						TaskName:    execution.TaskTitle,
+						Agent:       execution.AgentName,
+						Status:      execution.Status,
+						ProjectID:   execution.ProjectID,
+						ProjectName: execution.ProjectName,
 					}
 
 					// Skip rejected executions from dashboard sections
@@ -957,11 +977,13 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 					if gitErr == nil && gitStatus != nil && gitStatus.IsDirty {
 						// Has uncommitted changes in this directory
 						summary := TaskExecutionSummary{
-							ID:       baseDir.ID,
-							TaskID:   0,
-							TaskName: baseDir.Path,
-							Agent:    gitStatus.CurrentBranch,
-							Status:   "dirty",
+							ID:          baseDir.ID,
+							TaskID:      0,
+							TaskName:    baseDir.Path,
+							Agent:       gitStatus.CurrentBranch,
+							Status:      "dirty",
+							ProjectID:   project.ID,
+							ProjectName: project.Name,
 						}
 						stats.GitChangesAwaitingReview = append(stats.GitChangesAwaitingReview, summary)
 					}
@@ -1690,6 +1712,12 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		return
 	}
 
+	// Handle sub-endpoints like /api/task-executions/{id}/accept
+	if len(pathParts) >= 2 && pathParts[1] == "accept" {
+		handleAcceptTaskExecution(w, r, ctx, pathParts)
+		return
+	}
+
 	// Handle sub-endpoints like /api/task-executions/{id}/dev-server
 	if len(pathParts) >= 2 && pathParts[1] == "dev-server" {
 		executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
@@ -2034,11 +2062,7 @@ func updateTaskExecutionStatus(ctx context.Context, executionID int64, status st
 		log.Printf("Failed to update task execution status: %v", err)
 		return
 	}
-
-	// ELO competitions are now recorded when user merges, not on task completion
 }
-
-// processTaskCompetitionsAsync function removed - ELO competitions now recorded on merge, not task completion
 
 func handleSendInputToSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	if r.Method != "POST" {
@@ -2236,23 +2260,87 @@ func handleRejectTaskExecution(w http.ResponseWriter, r *http.Request, ctx conte
 		return
 	}
 
-	// Record ELO losses against all other agents for the same task
-	go func() {
-		// Use a new context for background processing
-		bgCtx := context.Background()
-		bgQueries := db.New(database)
-		
-		err := recordELOLossesForRejectedTask(bgCtx, bgQueries, execution.TaskID, execution.AgentID)
-		if err != nil {
-			log.Printf("Failed to record ELO losses for rejected task %d: %v", execution.TaskID, err)
-		}
-	}()
-
 	// Return success response
 	response := map[string]interface{}{
 		"success": true,
 		"message": "Task execution rejected successfully",
 		"status":  "rejected",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleAcceptTaskExecution(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if len(pathParts) < 1 {
+		http.Error(w, "Task execution ID required", http.StatusBadRequest)
+		return
+	}
+
+	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get the task execution to check current status
+	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
+	if err != nil {
+		log.Printf("Failed to get task execution: %v", err)
+		http.Error(w, "Task execution not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if already completed or rejected
+	if execution.Status == "completed" {
+		http.Error(w, "Task execution is already completed", http.StatusBadRequest)
+		return
+	}
+	if execution.Status == "rejected" {
+		http.Error(w, "Task execution is already rejected", http.StatusBadRequest)
+		return
+	}
+
+	// Clean up tmux sessions
+	cleanupTmuxSessionsFromExecution(execution)
+
+	// Get task details to find project ID for teardown commands
+	task, err := queries.GetTask(ctx, execution.TaskID)
+	if err != nil {
+		log.Printf("Warning: failed to get task details: %v", err)
+	} else {
+		// Get base directory for teardown commands
+		baseDir, err := queries.GetBaseDirectoryByProjectAndID(ctx, db.GetBaseDirectoryByProjectAndIDParams{
+			ProjectID:       task.ProjectID,
+			BaseDirectoryID: execution.BaseDirectoryID,
+		})
+		if err != nil {
+			log.Printf("Warning: failed to get base directory for teardown commands: %v", err)
+		} else {
+			// Run teardown commands in base directory
+			runTeardownCommandsInDir(baseDir)
+		}
+	}
+
+	// Update status to "completed"
+	_, err = queries.UpdateTaskExecutionStatus(ctx, db.UpdateTaskExecutionStatusParams{
+		ID:     executionID,
+		Status: "completed",
+	})
+	if err != nil {
+		log.Printf("Failed to update task execution status: %v", err)
+		http.Error(w, "Failed to accept task execution", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	response := map[string]interface{}{
+		"success": true,
+		"message": "Task execution accepted successfully",
+		"status":  "completed",
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -2303,6 +2391,18 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 		dir, err := queries.GetBaseDirectory(ctx, id)
 		if err != nil {
 			http.Error(w, "Base directory not found", http.StatusNotFound)
+			return
+		}
+
+		// Check for sub-resource requests
+		if len(pathParts) > 1 && pathParts[1] == "tasks" {
+			// GET /api/base-directories/{id}/tasks
+			tasks, err := queries.GetTasksByBaseDirectoryID(ctx, dir.BaseDirectoryID)
+			if err != nil {
+				http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
+				return
+			}
+			json.NewEncoder(w).Encode(tasks)
 			return
 		}
 
@@ -2875,188 +2975,3 @@ func runTeardownCommandsInDir(baseDir db.BaseDirectory) {
 	}
 }
 
-func handleCompetitionsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	switch r.Method {
-	case "GET":
-		if len(pathParts) == 0 {
-			competitions, err := queries.ListCompetitions(ctx)
-			if err != nil {
-				http.Error(w, "Failed to list competitions", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(competitions)
-		} else if pathParts[0] == "history" {
-			history, err := queries.GetCompetitionHistory(ctx)
-			if err != nil {
-				http.Error(w, "Failed to get competition history", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(history)
-		} else if pathParts[0] == "task" && len(pathParts) > 1 {
-			taskID, err := strconv.ParseInt(pathParts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid task ID", http.StatusBadRequest)
-				return
-			}
-			competitions, err := queries.ListCompetitionsByTask(ctx, taskID)
-			if err != nil {
-				http.Error(w, "Failed to get competitions for task", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(competitions)
-		} else if pathParts[0] == "agent" && len(pathParts) > 1 {
-			agentID, err := strconv.ParseInt(pathParts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid agent ID", http.StatusBadRequest)
-				return
-			}
-			competitions, err := queries.ListCompetitionsByAgent(ctx, db.ListCompetitionsByAgentParams{
-				Agent1ID: agentID,
-				Agent2ID: agentID,
-			})
-			if err != nil {
-				http.Error(w, "Failed to get competitions for agent", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(competitions)
-		} else {
-			competitionID, err := strconv.ParseInt(pathParts[0], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid competition ID", http.StatusBadRequest)
-				return
-			}
-			competition, err := queries.GetCompetition(ctx, competitionID)
-			if err != nil {
-				http.Error(w, "Competition not found", http.StatusNotFound)
-				return
-			}
-			json.NewEncoder(w).Encode(competition)
-		}
-
-	case "POST":
-		if len(pathParts) > 0 && pathParts[0] == "process-task" && len(pathParts) > 1 {
-			taskID, err := strconv.ParseInt(pathParts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid task ID", http.StatusBadRequest)
-				return
-			}
-
-			eloCalc := NewELOCalculator(queries)
-			result, err := eloCalc.ProcessTaskCompetitions(ctx, taskID)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to process competitions: %v", err), http.StatusInternalServerError)
-				return
-			}
-
-			json.NewEncoder(w).Encode(result)
-		} else {
-			var createReq struct {
-				TaskID            int64  `json:"task_id"`
-				Agent1ID          int64  `json:"agent1_id"`
-				Agent2ID          int64  `json:"agent2_id"`
-				Agent1ExecutionID int64  `json:"agent1_execution_id"`
-				Agent2ExecutionID int64  `json:"agent2_execution_id"`
-				Result            string `json:"result"` // "agent1_wins", "agent2_wins", "draw"
-				Notes             string `json:"notes"`
-			}
-
-			if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
-				http.Error(w, "Invalid JSON", http.StatusBadRequest)
-				return
-			}
-
-			var result MatchResult
-			switch createReq.Result {
-			case "agent1_wins":
-				result = Agent1Wins
-			case "agent2_wins":
-				result = Agent2Wins
-			case "draw":
-				result = Draw
-			default:
-				http.Error(w, "Invalid result value", http.StatusBadRequest)
-				return
-			}
-
-			eloCalc := NewELOCalculator(queries)
-			competition, err := eloCalc.RecordCompetition(ctx, CompetitionParams{
-				TaskID:            createReq.TaskID,
-				Agent1ID:          createReq.Agent1ID,
-				Agent2ID:          createReq.Agent2ID,
-				Agent1ExecutionID: createReq.Agent1ExecutionID,
-				Agent2ExecutionID: createReq.Agent2ExecutionID,
-				Result:            result,
-				Notes:             createReq.Notes,
-			})
-
-			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to create competition: %v", err), http.StatusInternalServerError)
-				return
-			}
-
-			json.NewEncoder(w).Encode(competition)
-		}
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func handleELOAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	switch r.Method {
-	case "GET":
-		if len(pathParts) == 0 || pathParts[0] == "leaderboard" {
-			leaderboard, err := queries.GetAgentLeaderboard(ctx)
-			if err != nil {
-				http.Error(w, "Failed to get leaderboard", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(leaderboard)
-		} else if pathParts[0] == "agent" && len(pathParts) > 2 && pathParts[2] == "history" {
-			agentID, err := strconv.ParseInt(pathParts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid agent ID", http.StatusBadRequest)
-				return
-			}
-			history, err := queries.GetAgentELOHistory(ctx, db.GetAgentELOHistoryParams{
-				Agent1ID: agentID,
-				Agent2ID: agentID,
-			})
-			if err != nil {
-				http.Error(w, "Failed to get ELO history", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(history)
-		} else if pathParts[0] == "head-to-head" && len(pathParts) > 2 {
-			agent1ID, err := strconv.ParseInt(pathParts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid agent1 ID", http.StatusBadRequest)
-				return
-			}
-			agent2ID, err := strconv.ParseInt(pathParts[2], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid agent2 ID", http.StatusBadRequest)
-				return
-			}
-
-			record, err := queries.GetHeadToHeadRecord(ctx, db.GetHeadToHeadRecordParams{
-				WinnerAgentID:   sql.NullInt64{Valid: true, Int64: agent1ID},
-				WinnerAgentID_2: sql.NullInt64{Valid: true, Int64: agent2ID},
-				Agent1ID:        agent1ID,
-				Agent2ID:        agent2ID,
-				Agent1ID_2:      agent2ID,
-				Agent2ID_2:      agent1ID,
-			})
-			if err != nil {
-				http.Error(w, "Failed to get head-to-head record", http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(record)
-		} else {
-			http.Error(w, "Unknown ELO endpoint", http.StatusNotFound)
-		}
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}

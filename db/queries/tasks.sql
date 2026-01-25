@@ -37,3 +37,8 @@ RETURNING *;
 
 -- name: DeleteTask :exec
 DELETE FROM tasks WHERE id = ?;
+
+-- name: GetTasksByBaseDirectoryID :many
+SELECT * FROM tasks
+WHERE base_directory_id = ?
+ORDER BY created_at DESC;

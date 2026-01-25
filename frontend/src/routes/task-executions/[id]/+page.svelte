@@ -35,6 +35,7 @@
 	let isResendingTask = false;
 	let isDeleting = false;
 	let isRejecting = false;
+	let isAccepting = false;
 
 	$: executionId = $page.params.id;
 
@@ -541,7 +542,7 @@
 		if (isRejecting) return;
 
 		// Show confirmation dialog
-		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n- Set the status to "rejected"\n- Mark this as a loss against other agents for ELO calculation\n- This action cannot be undone.`);
+		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n- Set the status to "rejected"\n- This action cannot be undone.`);
 
 		if (!confirmed) return;
 
@@ -563,6 +564,33 @@
 			alert('Failed to reject task execution');
 		} finally {
 			isRejecting = false;
+		}
+	}
+
+	async function acceptTaskExecution() {
+		if (isAccepting) return;
+
+		const confirmed = confirm(`Are you sure you want to accept this task execution? This will:\n\n- Kill all associated tmux sessions\n- Run teardown commands\n- Set the status to "completed"`);
+
+		if (!confirmed) return;
+
+		try {
+			isAccepting = true;
+			const response = await fetch(`/api/task-executions/${executionId}/accept`, {
+				method: 'POST'
+			});
+
+			if (response.ok) {
+				await loadTaskExecutionDetails();
+			} else {
+				const errorData = await response.text();
+				alert(`Failed to accept task execution: ${errorData}`);
+			}
+		} catch (err) {
+			console.error('Failed to accept task execution:', err);
+			alert('Failed to accept task execution');
+		} finally {
+			isAccepting = false;
 		}
 	}
 </script>
@@ -656,6 +684,18 @@
 										Stop Dev Server
 									</Button>
 								{/if}
+
+								<Button
+									variant="success"
+									onclick={acceptTaskExecution}
+									disabled={isAccepting || execution.status === 'completed' || execution.status === 'rejected'}
+									loading={isAccepting}
+								>
+									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+									</svg>
+									{isAccepting ? 'Accepting...' : 'Accept'}
+								</Button>
 
 								<Button
 									variant="warning"

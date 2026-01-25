@@ -113,3 +113,4 @@ remote-code
 remote-code.db
 remote-code-test*.db
 app.db
+test.txt

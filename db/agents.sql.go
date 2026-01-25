@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 )
 
 const createAgent = `-- name: CreateAgent :one
@@ -82,95 +81,6 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (Agent, error) {
 		&i.LastCompetedAt,
 	)
 	return i, err
-}
-
-const getAgentELOHistory = `-- name: GetAgentELOHistory :many
-SELECT 
-    c.created_at,
-    c.agent1_elo_after as elo_rating,
-    (c.agent1_elo_after - c.agent1_elo_before) as elo_change
-FROM agent_competitions c
-WHERE c.agent1_id = ?
-UNION ALL
-SELECT 
-    c.created_at,
-    c.agent2_elo_after as elo_rating,
-    (c.agent2_elo_after - c.agent2_elo_before) as elo_change
-FROM agent_competitions c
-WHERE c.agent2_id = ?
-ORDER BY created_at ASC
-`
-
-type GetAgentELOHistoryParams struct {
-	Agent1ID int64 `db:"agent1_id" json:"agent1_id"`
-	Agent2ID int64 `db:"agent2_id" json:"agent2_id"`
-}
-
-type GetAgentELOHistoryRow struct {
-	CreatedAt sql.NullTime `db:"created_at" json:"created_at"`
-	EloRating float64      `db:"elo_rating" json:"elo_rating"`
-	EloChange interface{}  `db:"elo_change" json:"elo_change"`
-}
-
-func (q *Queries) GetAgentELOHistory(ctx context.Context, arg GetAgentELOHistoryParams) ([]GetAgentELOHistoryRow, error) {
-	rows, err := q.db.QueryContext(ctx, getAgentELOHistory, arg.Agent1ID, arg.Agent2ID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAgentELOHistoryRow
-	for rows.Next() {
-		var i GetAgentELOHistoryRow
-		if err := rows.Scan(&i.CreatedAt, &i.EloRating, &i.EloChange); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAgentLeaderboard = `-- name: GetAgentLeaderboard :many
-SELECT id, name, elo_rating, games_played, wins, losses, draws, last_competed_at, win_percentage, elo_rank FROM agent_leaderboard
-`
-
-func (q *Queries) GetAgentLeaderboard(ctx context.Context) ([]AgentLeaderboard, error) {
-	rows, err := q.db.QueryContext(ctx, getAgentLeaderboard)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AgentLeaderboard
-	for rows.Next() {
-		var i AgentLeaderboard
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.EloRating,
-			&i.GamesPlayed,
-			&i.Wins,
-			&i.Losses,
-			&i.Draws,
-			&i.LastCompetedAt,
-			&i.WinPercentage,
-			&i.EloRank,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getAgentsByRootID = `-- name: GetAgentsByRootID :many
@@ -277,50 +187,6 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		arg.Name,
 		arg.Command,
 		arg.Params,
-		arg.ID,
-	)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.RootID,
-		&i.Name,
-		&i.Command,
-		&i.Params,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.EloRating,
-		&i.GamesPlayed,
-		&i.Wins,
-		&i.Losses,
-		&i.Draws,
-		&i.LastCompetedAt,
-	)
-	return i, err
-}
-
-const updateAgentELO = `-- name: UpdateAgentELO :one
-UPDATE agents
-SET elo_rating = ?, games_played = games_played + 1, 
-    wins = wins + ?, losses = losses + ?, draws = draws + ?,
-    last_competed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-WHERE id = ?
-RETURNING id, root_id, name, command, params, created_at, updated_at, elo_rating, games_played, wins, losses, draws, last_competed_at
-`
-
-type UpdateAgentELOParams struct {
-	EloRating sql.NullFloat64 `db:"elo_rating" json:"elo_rating"`
-	Wins      sql.NullInt64   `db:"wins" json:"wins"`
-	Losses    sql.NullInt64   `db:"losses" json:"losses"`
-	Draws     sql.NullInt64   `db:"draws" json:"draws"`
-	ID        int64           `db:"id" json:"id"`
-}
-
-func (q *Queries) UpdateAgentELO(ctx context.Context, arg UpdateAgentELOParams) (Agent, error) {
-	row := q.db.QueryRowContext(ctx, updateAgentELO,
-		arg.EloRating,
-		arg.Wins,
-		arg.Losses,
-		arg.Draws,
 		arg.ID,
 	)
 	var i Agent

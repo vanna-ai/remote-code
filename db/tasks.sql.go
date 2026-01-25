@@ -129,6 +129,44 @@ func (q *Queries) GetTaskWithBaseDirectory(ctx context.Context, id int64) (GetTa
 	return i, err
 }
 
+const getTasksByBaseDirectoryID = `-- name: GetTasksByBaseDirectoryID :many
+SELECT id, project_id, base_directory_id, title, description, status, created_at, updated_at FROM tasks
+WHERE base_directory_id = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetTasksByBaseDirectoryID(ctx context.Context, baseDirectoryID string) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getTasksByBaseDirectoryID, baseDirectoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.BaseDirectoryID,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTasksByProjectID = `-- name: GetTasksByProjectID :many
 SELECT id, project_id, base_directory_id, title, description, status, created_at, updated_at FROM tasks
 WHERE project_id = ?
