@@ -886,6 +886,8 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleGitAPI(w, r, ctx, pathParts[1:])
 	case "files":
 		handleFilesAPI(w, r, ctx, pathParts[1:])
+	case "remote-ports":
+		handleRemotePortsAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -898,6 +900,14 @@ type DashboardStats struct {
 	Agents                   int                      `json:"agents"`
 	GitChangesAwaitingReview []TaskExecutionSummary   `json:"git_changes_awaiting_review"`
 	AgentsWaitingForInput    []TaskExecutionSummary   `json:"agents_waiting_for_input"`
+	RemotePorts              []RemotePortSummary      `json:"remote_ports"`
+}
+
+type RemotePortSummary struct {
+	ID          int64   `json:"id"`
+	Port        int     `json:"port"`
+	ExternalUrl *string `json:"external_url"`
+	Status      string  `json:"status"`
 }
 
 type TaskExecutionSummary struct {
@@ -1010,6 +1020,26 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				stats.Agents = len(agents)
 			}
 
+			// Load remote ports
+			remotePorts, err := queries.ListActiveRemotePorts(ctx)
+			if err == nil {
+				stats.RemotePorts = make([]RemotePortSummary, len(remotePorts))
+				for i, rp := range remotePorts {
+					var extUrl *string
+					if rp.ExternalUrl.Valid {
+						extUrl = &rp.ExternalUrl.String
+					}
+					stats.RemotePorts[i] = RemotePortSummary{
+						ID:          rp.ID,
+						Port:        int(rp.Port),
+						ExternalUrl: extUrl,
+						Status:      rp.Status,
+					}
+				}
+			} else {
+				stats.RemotePorts = []RemotePortSummary{}
+			}
+
 			json.NewEncoder(w).Encode(stats)
 		} else {
 			http.Error(w, "Unknown dashboard endpoint", http.StatusNotFound)
@@ -1017,6 +1047,227 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// Remote Ports API for cloudflared tunnel management
+func handleRemotePortsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "GET":
+		// List all active remote ports
+		remotePorts, err := queries.ListActiveRemotePorts(ctx)
+		if err != nil {
+			http.Error(w, "Failed to list remote ports", http.StatusInternalServerError)
+			return
+		}
+
+		result := make([]RemotePortSummary, len(remotePorts))
+		for i, rp := range remotePorts {
+			var extUrl *string
+			if rp.ExternalUrl.Valid {
+				extUrl = &rp.ExternalUrl.String
+			}
+			result[i] = RemotePortSummary{
+				ID:          rp.ID,
+				Port:        int(rp.Port),
+				ExternalUrl: extUrl,
+				Status:      rp.Status,
+			}
+		}
+		json.NewEncoder(w).Encode(result)
+
+	case "POST":
+		// Start a new cloudflared tunnel
+		var req struct {
+			Port int `json:"port"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		if req.Port <= 0 || req.Port > 65535 {
+			http.Error(w, "Invalid port number", http.StatusBadRequest)
+			return
+		}
+
+		// Generate unique session name
+		sessionName := fmt.Sprintf("tunnel_%d_%d", req.Port, time.Now().Unix())
+
+		// Create database record
+		remotePort, err := queries.CreateRemotePort(ctx, db.CreateRemotePortParams{
+			Port:          int64(req.Port),
+			TmuxSessionID: sessionName,
+			Status:        "starting",
+		})
+		if err != nil {
+			log.Printf("Failed to create remote port record: %v", err)
+			http.Error(w, "Failed to create tunnel record", http.StatusInternalServerError)
+			return
+		}
+
+		// Start cloudflared tunnel in a goroutine
+		go startCloudflaredTunnel(ctx, remotePort.ID, req.Port, sessionName)
+
+		var extUrl *string
+		if remotePort.ExternalUrl.Valid {
+			extUrl = &remotePort.ExternalUrl.String
+		}
+		json.NewEncoder(w).Encode(RemotePortSummary{
+			ID:          remotePort.ID,
+			Port:        int(remotePort.Port),
+			ExternalUrl: extUrl,
+			Status:      remotePort.Status,
+		})
+
+	case "DELETE":
+		// Stop a cloudflared tunnel
+		if len(pathParts) == 0 {
+			http.Error(w, "Missing tunnel ID", http.StatusBadRequest)
+			return
+		}
+
+		id, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid tunnel ID", http.StatusBadRequest)
+			return
+		}
+
+		remotePort, err := queries.GetRemotePort(ctx, id)
+		if err != nil {
+			http.Error(w, "Tunnel not found", http.StatusNotFound)
+			return
+		}
+
+		// Stop the cloudflared tunnel
+		stopCloudflaredTunnel(remotePort.TmuxSessionID)
+
+		// Delete the database record
+		if err := queries.DeleteRemotePort(ctx, id); err != nil {
+			log.Printf("Failed to delete remote port record: %v", err)
+			http.Error(w, "Failed to delete tunnel record", http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"status": "stopped"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// startCloudflaredTunnel starts a cloudflared tunnel in a tmux session and monitors for the external URL
+func startCloudflaredTunnel(ctx context.Context, portID int64, port int, sessionName string) {
+	// Create tmux session and run cloudflared
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName)
+	if err := tmuxCmd.Run(); err != nil {
+		log.Printf("Failed to create tmux session for cloudflared: %v", err)
+		queries.UpdateRemotePortStatus(ctx, db.UpdateRemotePortStatusParams{
+			ID:     portID,
+			Status: "error",
+		})
+		return
+	}
+
+	// Send cloudflared command to the session
+	cloudflaredCommand := fmt.Sprintf("cloudflared tunnel --url http://localhost:%d 2>&1 | tee /tmp/cloudflared_%s.log", port, sessionName)
+	sendCmd := exec.Command("tmux", "send-keys", "-t", sessionName, cloudflaredCommand, "Enter")
+	if err := sendCmd.Run(); err != nil {
+		log.Printf("Failed to start cloudflared: %v", err)
+		queries.UpdateRemotePortStatus(ctx, db.UpdateRemotePortStatusParams{
+			ID:     portID,
+			Status: "error",
+		})
+		return
+	}
+
+	// Monitor for the external URL
+	go monitorCloudflaredOutput(portID, sessionName)
+}
+
+// monitorCloudflaredOutput watches the cloudflared output for the external URL
+func monitorCloudflaredOutput(portID int64, sessionName string) {
+	ctx := context.Background()
+	logFile := fmt.Sprintf("/tmp/cloudflared_%s.log", sessionName)
+
+	// Poll for up to 30 seconds for the URL to appear
+	for i := 0; i < 60; i++ {
+		time.Sleep(500 * time.Millisecond)
+
+		// Read the log file
+		content, err := os.ReadFile(logFile)
+		if err != nil {
+			continue
+		}
+
+		// Look specifically for trycloudflare.com URL
+		contentStr := string(content)
+		marker := ".trycloudflare.com"
+		markerIdx := strings.Index(contentStr, marker)
+		if markerIdx == -1 {
+			continue
+		}
+
+		// Find the start of the URL by searching backwards for https://
+		urlStart := markerIdx
+		for urlStart > 0 && contentStr[urlStart:urlStart+8] != "https://" {
+			urlStart--
+		}
+		if urlStart < 0 || contentStr[urlStart:urlStart+8] != "https://" {
+			continue
+		}
+
+		// Find the end of the URL (ends at whitespace or special chars)
+		urlEnd := markerIdx + len(marker)
+		for urlEnd < len(contentStr) {
+			ch := contentStr[urlEnd]
+			if ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '|' {
+				break
+			}
+			urlEnd++
+		}
+
+		url := contentStr[urlStart:urlEnd]
+
+		// Update the database
+		queries.UpdateRemotePortExternalUrl(ctx, db.UpdateRemotePortExternalUrlParams{
+			ID:          portID,
+			ExternalUrl: sql.NullString{String: url, Valid: true},
+		})
+		queries.UpdateRemotePortStatus(ctx, db.UpdateRemotePortStatusParams{
+			ID:     portID,
+			Status: "connected",
+		})
+		log.Printf("Cloudflared tunnel connected: %s", url)
+		return
+	}
+
+	// Timeout - mark as error
+	log.Printf("Cloudflared tunnel failed to connect within timeout")
+	queries.UpdateRemotePortStatus(ctx, db.UpdateRemotePortStatusParams{
+		ID:     portID,
+		Status: "error",
+	})
+}
+
+// stopCloudflaredTunnel stops a cloudflared tunnel by killing its tmux session
+func stopCloudflaredTunnel(sessionName string) {
+	// Send Ctrl-C to gracefully stop cloudflared
+	ctrlCCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "C-c")
+	ctrlCCmd.Run()
+
+	// Wait a moment for graceful shutdown
+	time.Sleep(500 * time.Millisecond)
+
+	// Kill the tmux session
+	killCmd := exec.Command("tmux", "kill-session", "-t", sessionName)
+	if err := killCmd.Run(); err != nil {
+		log.Printf("Warning: failed to kill tmux session %s: %v", sessionName, err)
+	}
+
+	// Clean up log file
+	logFile := fmt.Sprintf("/tmp/cloudflared_%s.log", sessionName)
+	os.Remove(logFile)
 }
 
 func handleRootsAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

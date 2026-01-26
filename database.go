@@ -113,6 +113,7 @@ func applyMigrations(database *sql.DB) error {
 		"db/migrations/001_initial.sql",
 		"db/migrations/002_elo_tracking.sql",
 		"db/migrations/003_remove_worktrees.sql",
+		"db/migrations/004_remote_ports.sql",
 	}
 
 	for _, migrationPath := range migrations {

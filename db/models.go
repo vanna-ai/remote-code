@@ -99,6 +99,16 @@ type Project struct {
 	UpdatedAt sql.NullTime `db:"updated_at" json:"updated_at"`
 }
 
+type RemotePort struct {
+	ID            int64          `db:"id" json:"id"`
+	Port          int64          `db:"port" json:"port"`
+	TmuxSessionID string         `db:"tmux_session_id" json:"tmux_session_id"`
+	ExternalUrl   sql.NullString `db:"external_url" json:"external_url"`
+	Status        string         `db:"status" json:"status"`
+	CreatedAt     sql.NullTime   `db:"created_at" json:"created_at"`
+	UpdatedAt     sql.NullTime   `db:"updated_at" json:"updated_at"`
+}
+
 type Root struct {
 	ID          int64          `db:"id" json:"id"`
 	LocalPort   string         `db:"local_port" json:"local_port"`
