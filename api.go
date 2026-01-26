@@ -892,19 +892,33 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleFilesAPI(w, r, ctx, pathParts[1:])
 	case "remote-ports":
 		handleRemotePortsAPI(w, r, ctx, pathParts[1:])
+	case "directory-dev-servers":
+		handleDirectoryDevServersAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
 }
 
 type DashboardStats struct {
-	ActiveSessions           int                      `json:"active_sessions"`
-	Projects                 int                      `json:"projects"`
-	TaskExecutions           int                      `json:"task_executions"`
-	Agents                   int                      `json:"agents"`
-	GitChangesAwaitingReview []TaskExecutionSummary   `json:"git_changes_awaiting_review"`
-	AgentsWaitingForInput    []TaskExecutionSummary   `json:"agents_waiting_for_input"`
-	RemotePorts              []RemotePortSummary      `json:"remote_ports"`
+	ActiveSessions           int                        `json:"active_sessions"`
+	Projects                 int                        `json:"projects"`
+	TaskExecutions           int                        `json:"task_executions"`
+	Agents                   int                        `json:"agents"`
+	GitChangesAwaitingReview []TaskExecutionSummary     `json:"git_changes_awaiting_review"`
+	AgentsWaitingForInput    []TaskExecutionSummary     `json:"agents_waiting_for_input"`
+	RemotePorts              []RemotePortSummary        `json:"remote_ports"`
+	DirectoryDevServers      []DirectoryDevServerSummary `json:"directory_dev_servers"`
+}
+
+type DirectoryDevServerSummary struct {
+	ID              int64  `json:"id"`
+	BaseDirectoryID int64  `json:"base_directory_id"`
+	DirectoryPath   string `json:"directory_path"`
+	DirectoryName   string `json:"directory_name"`
+	ProjectID       int64  `json:"project_id"`
+	ProjectName     string `json:"project_name"`
+	TmuxSessionID   string `json:"tmux_session_id"`
+	Status          string `json:"status"`
 }
 
 type RemotePortSummary struct {
@@ -1042,6 +1056,26 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 				}
 			} else {
 				stats.RemotePorts = []RemotePortSummary{}
+			}
+
+			// Load directory dev servers
+			dirDevServers, err := queries.ListRunningDirectoryDevServers(ctx)
+			if err == nil {
+				stats.DirectoryDevServers = make([]DirectoryDevServerSummary, len(dirDevServers))
+				for i, dds := range dirDevServers {
+					stats.DirectoryDevServers[i] = DirectoryDevServerSummary{
+						ID:              dds.ID,
+						BaseDirectoryID: dds.BaseDirectoryID,
+						DirectoryPath:   dds.DirectoryPath,
+						DirectoryName:   dds.DirectoryName,
+						ProjectID:       dds.ProjectID,
+						ProjectName:     dds.ProjectName,
+						TmuxSessionID:   dds.TmuxSessionID,
+						Status:          dds.Status,
+					}
+				}
+			} else {
+				stats.DirectoryDevServers = []DirectoryDevServerSummary{}
 			}
 
 			json.NewEncoder(w).Encode(stats)
@@ -2636,6 +2670,12 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 			return
 		}
 
+		// Handle dev-server sub-resource
+		if len(pathParts) > 1 && pathParts[1] == "dev-server" {
+			handleDirectoryDevServerSubResource(w, r, ctx, dir)
+			return
+		}
+
 		// Get the project name
 		project, _ := queries.GetProject(ctx, dir.ProjectID)
 		projectName := ""
@@ -2738,6 +2778,214 @@ func stopDevServerForExecution(ctx context.Context, queries *db.Queries, executi
 	})
 
 	return err
+}
+
+// Directory Dev Server Sub-Resource Handler (for /api/base-directories/{id}/dev-server)
+func handleDirectoryDevServerSubResource(w http.ResponseWriter, r *http.Request, ctx context.Context, dir db.BaseDirectory) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "GET":
+		// Check if dev server is running for this directory
+		devServer, err := queries.GetDirectoryDevServerByDirectoryID(ctx, dir.ID)
+		if err != nil {
+			// No dev server running
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"running": false,
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"running":          true,
+			"id":               devServer.ID,
+			"tmux_session_id":  devServer.TmuxSessionID,
+			"status":           devServer.Status,
+		})
+
+	case "POST":
+		// Start dev server for this directory
+		err := startDevServerForDirectory(ctx, queries, dir.ID)
+		if err != nil {
+			log.Printf("Failed to start dev server for directory %d: %v", dir.ID, err)
+			http.Error(w, fmt.Sprintf("Failed to start dev server: %v", err), http.StatusInternalServerError)
+			return
+		}
+		devServer, _ := queries.GetDirectoryDevServerByDirectoryID(ctx, dir.ID)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"running":          true,
+			"id":               devServer.ID,
+			"tmux_session_id":  devServer.TmuxSessionID,
+			"status":           devServer.Status,
+		})
+
+	case "DELETE":
+		// Stop dev server for this directory
+		err := stopDevServerForDirectory(ctx, queries, dir.ID)
+		if err != nil {
+			log.Printf("Failed to stop dev server for directory %d: %v", dir.ID, err)
+			http.Error(w, fmt.Sprintf("Failed to stop dev server: %v", err), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"running": false,
+			"status":  "stopped",
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// Directory Dev Servers API Handler (for /api/directory-dev-servers)
+func handleDirectoryDevServersAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "GET":
+		// List all running directory dev servers
+		devServers, err := queries.ListRunningDirectoryDevServers(ctx)
+		if err != nil {
+			http.Error(w, "Failed to list directory dev servers", http.StatusInternalServerError)
+			return
+		}
+
+		result := make([]DirectoryDevServerSummary, len(devServers))
+		for i, dds := range devServers {
+			result[i] = DirectoryDevServerSummary{
+				ID:              dds.ID,
+				BaseDirectoryID: dds.BaseDirectoryID,
+				DirectoryPath:   dds.DirectoryPath,
+				DirectoryName:   dds.DirectoryName,
+				ProjectID:       dds.ProjectID,
+				ProjectName:     dds.ProjectName,
+				TmuxSessionID:   dds.TmuxSessionID,
+				Status:          dds.Status,
+			}
+		}
+		json.NewEncoder(w).Encode(result)
+
+	case "DELETE":
+		// Stop a specific directory dev server by ID
+		if len(pathParts) == 0 {
+			http.Error(w, "Missing dev server ID", http.StatusBadRequest)
+			return
+		}
+
+		id, err := strconv.ParseInt(pathParts[0], 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid dev server ID", http.StatusBadRequest)
+			return
+		}
+
+		devServer, err := queries.GetDirectoryDevServer(ctx, id)
+		if err != nil {
+			http.Error(w, "Dev server not found", http.StatusNotFound)
+			return
+		}
+
+		err = stopDevServerForDirectory(ctx, queries, devServer.BaseDirectoryID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to stop dev server: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"status": "stopped"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// Dev server functions for directories
+func startDevServerForDirectory(ctx context.Context, queries *db.Queries, directoryID int64) error {
+	// Check if already running
+	existing, err := queries.GetDirectoryDevServerByDirectoryID(ctx, directoryID)
+	if err == nil && existing.Status == "running" {
+		return fmt.Errorf("dev server already running for this directory")
+	}
+
+	// Get directory info
+	dir, err := queries.GetBaseDirectory(ctx, directoryID)
+	if err != nil {
+		return fmt.Errorf("failed to get directory: %v", err)
+	}
+
+	// Create session name
+	sessionName := fmt.Sprintf("dev_dir_%d", directoryID)
+
+	// Start tmux session in the directory
+	tmuxCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", dir.Path)
+	err = tmuxCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to create tmux session: %v", err)
+	}
+
+	// Execute dev server setup commands if present
+	if dir.DevServerSetupCommands != "" {
+		setupCmd := exec.Command("tmux", "send-keys", "-t", sessionName, dir.DevServerSetupCommands, "Enter")
+		err = setupCmd.Run()
+		if err != nil {
+			log.Printf("Failed to send dev server setup commands: %v", err)
+		}
+	} else {
+		// No setup commands, just show info
+		echoCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "echo 'Dev server session created. No setup commands configured.'", "Enter")
+		echoCmd.Run()
+
+		bashCmd := exec.Command("tmux", "send-keys", "-t", sessionName, "bash", "Enter")
+		bashCmd.Run()
+	}
+
+	// Create database record
+	_, err = queries.CreateDirectoryDevServer(ctx, db.CreateDirectoryDevServerParams{
+		BaseDirectoryID: directoryID,
+		TmuxSessionID:   sessionName,
+		Status:          "running",
+	})
+	if err != nil {
+		// Try to clean up the tmux session
+		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
+		return fmt.Errorf("failed to create dev server record: %v", err)
+	}
+
+	return nil
+}
+
+func stopDevServerForDirectory(ctx context.Context, queries *db.Queries, directoryID int64) error {
+	// Get dev server record
+	devServer, err := queries.GetDirectoryDevServerByDirectoryID(ctx, directoryID)
+	if err != nil {
+		return fmt.Errorf("no dev server found for this directory")
+	}
+
+	// Get directory info for teardown commands
+	dir, err := queries.GetBaseDirectory(ctx, directoryID)
+	if err == nil && dir.DevServerTeardownCommands != "" {
+		// Send teardown commands
+		teardownCmd := exec.Command("tmux", "send-keys", "-t", devServer.TmuxSessionID, dir.DevServerTeardownCommands, "Enter")
+		teardownCmd.Run()
+		// Wait briefly for teardown
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Send Ctrl-C to stop any running process
+	ctrlCCmd := exec.Command("tmux", "send-keys", "-t", devServer.TmuxSessionID, "C-c")
+	ctrlCCmd.Run()
+
+	// Wait briefly
+	time.Sleep(500 * time.Millisecond)
+
+	// Kill the tmux session
+	killCmd := exec.Command("tmux", "kill-session", "-t", devServer.TmuxSessionID)
+	killCmd.Run() // Ignore error if session doesn't exist
+
+	// Delete database record
+	err = queries.DeleteDirectoryDevServerByDirectoryID(ctx, directoryID)
+	if err != nil {
+		return fmt.Errorf("failed to delete dev server record: %v", err)
+	}
+
+	return nil
 }
 
 func handleTasksAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {

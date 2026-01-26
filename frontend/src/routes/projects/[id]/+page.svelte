@@ -58,6 +58,9 @@
 	let deletingProject = false;
 	let refreshing = false;
 	let directoryGitStatus = new Map(); // Map of directory id to git status
+	let devServerStatusMap = new Map(); // Map of directory id to dev server status
+	let startingDevServer = new Set();
+	let stoppingDevServer = new Set();
 	
 	// Kanban columns
 	const columns = [
@@ -101,11 +104,13 @@
 		await loadProject();
 		await loadTaskExecutions();
 		await loadDirectoryGitStatus();
+		await loadDevServerStatus();
 
-		// Refresh task executions and git status every 5 seconds
+		// Refresh task executions, git status, and dev server status every 5 seconds
 		const interval = setInterval(async () => {
 			await loadTaskExecutions();
 			await loadDirectoryGitStatus();
+			await loadDevServerStatus();
 		}, 5000);
 		return () => clearInterval(interval);
 	});
@@ -210,6 +215,70 @@
 			directoryGitStatus = new Map(directoryGitStatus);
 		} catch (error) {
 			console.error('Failed to load git status:', error);
+		}
+	}
+
+	async function loadDevServerStatus() {
+		if (!project || !project.baseDirectories) return;
+
+		try {
+			for (const dir of project.baseDirectories) {
+				const response = await fetch(`/api/base-directories/${dir.id}/dev-server`);
+				if (response.ok) {
+					const status = await response.json();
+					devServerStatusMap.set(dir.id, status);
+				} else {
+					devServerStatusMap.set(dir.id, { running: false });
+				}
+			}
+			// Trigger reactivity
+			devServerStatusMap = new Map(devServerStatusMap);
+		} catch (error) {
+			console.error('Failed to load dev server status:', error);
+		}
+	}
+
+	async function startDevServer(directoryId) {
+		if (startingDevServer.has(directoryId)) return;
+
+		try {
+			startingDevServer = new Set([...startingDevServer, directoryId]);
+			const response = await fetch(`/api/base-directories/${directoryId}/dev-server`, {
+				method: 'POST'
+			});
+			if (response.ok) {
+				await loadDevServerStatus();
+			} else {
+				const errorText = await response.text();
+				alert('Failed to start dev server: ' + errorText);
+			}
+		} catch (error) {
+			console.error('Failed to start dev server:', error);
+			alert('Failed to start dev server');
+		} finally {
+			startingDevServer = new Set([...startingDevServer].filter(id => id !== directoryId));
+		}
+	}
+
+	async function stopDevServer(directoryId) {
+		if (stoppingDevServer.has(directoryId)) return;
+
+		try {
+			stoppingDevServer = new Set([...stoppingDevServer, directoryId]);
+			const response = await fetch(`/api/base-directories/${directoryId}/dev-server`, {
+				method: 'DELETE'
+			});
+			if (response.ok) {
+				await loadDevServerStatus();
+			} else {
+				const errorText = await response.text();
+				alert('Failed to stop dev server: ' + errorText);
+			}
+		} catch (error) {
+			console.error('Failed to stop dev server:', error);
+			alert('Failed to stop dev server');
+		} finally {
+			stoppingDevServer = new Set([...stoppingDevServer].filter(id => id !== directoryId));
 		}
 	}
 	
@@ -968,6 +1037,72 @@
 										</div>
 									</div>
 								{/if}
+							{/if}
+
+							<!-- Dev Server Controls -->
+							{#if directory.devServerSetupCommands || directory.dev_server_setup_commands}
+								<div class="mt-3 pt-3 border-t border-slate-200">
+									<div class="flex items-center justify-between">
+										<div class="flex items-center gap-2 text-sm">
+											<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+											</svg>
+											<span class="text-vanna-navy">Dev Server</span>
+											{#if devServerStatusMap.get(directory.id)?.running}
+												<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-vanna-teal/10 text-vanna-teal">
+													<span class="w-1.5 h-1.5 bg-vanna-teal rounded-full animate-pulse"></span>
+													Running
+												</span>
+											{:else}
+												<span class="text-xs text-slate-500">Stopped</span>
+											{/if}
+										</div>
+										<div class="flex items-center gap-2">
+											{#if devServerStatusMap.get(directory.id)?.running}
+												<a
+													href="/dev-server/{directory.id}"
+													class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-vanna-teal bg-vanna-teal/10 rounded hover:bg-vanna-teal/20 transition-colors"
+												>
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+													</svg>
+													Terminal
+												</a>
+												<button
+													onclick={() => stopDevServer(directory.id)}
+													disabled={stoppingDevServer.has(directory.id)}
+													class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-vanna-orange bg-vanna-orange/10 rounded hover:bg-vanna-orange/20 transition-colors disabled:opacity-50"
+												>
+													{#if stoppingDevServer.has(directory.id)}
+														<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+													{:else}
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+														</svg>
+													{/if}
+													Stop
+												</button>
+											{:else}
+												<button
+													onclick={() => startDevServer(directory.id)}
+													disabled={startingDevServer.has(directory.id)}
+													class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-vanna-teal bg-vanna-teal/10 rounded hover:bg-vanna-teal/20 transition-colors disabled:opacity-50"
+												>
+													{#if startingDevServer.has(directory.id)}
+														<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+													{:else}
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+														</svg>
+													{/if}
+													Start
+												</button>
+											{/if}
+										</div>
+									</div>
+								</div>
 							{/if}
 
 							{#if editingDirectoryId === directory.base_directory_id}

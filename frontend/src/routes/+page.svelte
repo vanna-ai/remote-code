@@ -11,7 +11,8 @@
 		agents: 0,
 		git_changes_awaiting_review: [],
 		agents_waiting_for_input: [],
-		remote_ports: []
+		remote_ports: [],
+		directory_dev_servers: []
 	};
 	let loading = true;
 	let newPortNumber = '';
@@ -87,6 +88,22 @@
 			await navigator.clipboard.writeText(url);
 		} catch (error) {
 			console.error('Failed to copy to clipboard:', error);
+		}
+	}
+
+	async function stopDevServer(id) {
+		try {
+			const response = await fetch(`/api/directory-dev-servers/${id}`, {
+				method: 'DELETE'
+			});
+			if (response.ok) {
+				await loadDashboardStats();
+			} else {
+				alert('Failed to stop dev server');
+			}
+		} catch (error) {
+			console.error('Failed to stop dev server:', error);
+			alert('Failed to stop dev server');
 		}
 	}
 </script>
@@ -258,6 +275,72 @@
 			</p>
 		{/if}
 	</Card>
+
+	<!-- Running Dev Servers Card -->
+	{#if stats.directory_dev_servers && stats.directory_dev_servers.length > 0}
+		<Card>
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center">
+					<svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+					</svg>
+					<h2 class="text-lg font-semibold text-vanna-navy">Running Dev Servers</h2>
+					<span class="ml-2 px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+						{stats.directory_dev_servers.length}
+					</span>
+				</div>
+			</div>
+
+			<div class="space-y-3">
+				{#each stats.directory_dev_servers as devServer}
+					<div class="flex items-center justify-between p-3 bg-vanna-cream/30 rounded-lg">
+						<div class="flex-1">
+							<div class="text-xs font-semibold text-vanna-teal uppercase tracking-wide mb-1">
+								{devServer.project_name}
+							</div>
+							<div class="font-medium text-vanna-navy font-mono text-sm truncate">
+								{devServer.directory_path}
+							</div>
+							<div class="text-xs text-slate-500 mt-1">
+								Session: {devServer.tmux_session_id}
+							</div>
+						</div>
+						<div class="flex items-center space-x-2">
+							<!-- Status Badge -->
+							<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded flex items-center gap-1">
+								<span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+								{devServer.status}
+							</span>
+
+							<!-- View Terminal Button -->
+							<Button
+								size="sm"
+								variant="ghost"
+								onclick={() => window.location.href = `/dev-server/${devServer.base_directory_id}`}
+							>
+								<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+								</svg>
+								Terminal
+							</Button>
+
+							<!-- Stop Button -->
+							<Button
+								size="sm"
+								variant="danger"
+								onclick={() => stopDevServer(devServer.id)}
+							>
+								<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+								</svg>
+								Stop
+							</Button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</Card>
+	{/if}
 
 	<!-- Git & Agent Cards Side by Side -->
 	<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">

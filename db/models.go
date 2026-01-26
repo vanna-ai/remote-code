@@ -92,6 +92,15 @@ type CompetitionHistory struct {
 	CreatedAt       sql.NullTime    `db:"created_at" json:"created_at"`
 }
 
+type DirectoryDevServer struct {
+	ID              int64        `db:"id" json:"id"`
+	BaseDirectoryID int64        `db:"base_directory_id" json:"base_directory_id"`
+	TmuxSessionID   string       `db:"tmux_session_id" json:"tmux_session_id"`
+	Status          string       `db:"status" json:"status"`
+	CreatedAt       sql.NullTime `db:"created_at" json:"created_at"`
+	UpdatedAt       sql.NullTime `db:"updated_at" json:"updated_at"`
+}
+
 type Project struct {
 	ID        int64        `db:"id" json:"id"`
 	RootID    int64        `db:"root_id" json:"root_id"`
