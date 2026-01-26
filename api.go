@@ -875,6 +875,8 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTmuxSessionsAPI(w, r, ctx, pathParts[1:])
 	case "git":
 		handleGitAPI(w, r, ctx, pathParts[1:])
+	case "files":
+		handleFilesAPI(w, r, ctx, pathParts[1:])
 	default:
 		http.Error(w, "Unknown API endpoint", http.StatusNotFound)
 	}
@@ -2933,6 +2935,266 @@ func runTeardownCommandsInDir(baseDir db.BaseDirectory) {
 		if err != nil {
 			log.Printf("Warning: teardown commands failed: %v, output: %s", err, string(output))
 		}
+	}
+}
+
+// -----------------
+// Files API
+// -----------------
+
+type FileEntry struct {
+	Name    string `json:"name"`
+	IsDir   bool   `json:"isDir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"modTime"`
+}
+
+type DirectoryListing struct {
+	Entries []FileEntry `json:"entries"`
+	Path    string      `json:"path"`
+}
+
+type FileContent struct {
+	Content string `json:"content"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+}
+
+// isPathWithinBase checks if the given path is within the base directory
+func isPathWithinBase(basePath, targetPath string) bool {
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return false
+	}
+	absTarget, err := filepath.Abs(targetPath)
+	if err != nil {
+		return false
+	}
+	// Ensure base ends with separator for proper prefix matching
+	if !strings.HasSuffix(absBase, string(filepath.Separator)) {
+		absBase += string(filepath.Separator)
+	}
+	// Check if target is within base (or is base itself)
+	return strings.HasPrefix(absTarget+string(filepath.Separator), absBase) || absTarget == strings.TrimSuffix(absBase, string(filepath.Separator))
+}
+
+// validatePathAgainstBaseDirectories checks if the path is within any registered base directory
+func validatePathAgainstBaseDirectories(ctx context.Context, targetPath string) (bool, error) {
+	projects, err := queries.ListProjects(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	for _, project := range projects {
+		dirs, err := queries.GetBaseDirectoriesByProjectID(ctx, project.ID)
+		if err != nil {
+			continue
+		}
+		for _, dir := range dirs {
+			if isPathWithinBase(dir.Path, targetPath) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// isBinaryFile checks if a file appears to be binary by looking at the first 512 bytes
+func isBinaryFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil {
+		return false
+	}
+
+	// Check for null bytes (common in binary files)
+	for i := 0; i < n; i++ {
+		if buf[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func handleFilesAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
+	if len(pathParts) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid files endpoint"})
+		return
+	}
+
+	switch pathParts[0] {
+	case "list":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+			return
+		}
+
+		dirPath := r.URL.Query().Get("path")
+		if dirPath == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path parameter"})
+			return
+		}
+
+		// Security: validate path is within a base directory
+		valid, err := validatePathAgainstBaseDirectories(ctx, dirPath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to validate path"})
+			return
+		}
+		if !valid {
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Path is not within an allowed directory"})
+			return
+		}
+
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": fmt.Sprintf("Failed to read directory: %v", err)})
+			return
+		}
+
+		var fileEntries []FileEntry
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			fileEntries = append(fileEntries, FileEntry{
+				Name:    entry.Name(),
+				IsDir:   entry.IsDir(),
+				Size:    info.Size(),
+				ModTime: info.ModTime().Format(time.RFC3339),
+			})
+		}
+
+		json.NewEncoder(w).Encode(DirectoryListing{
+			Entries: fileEntries,
+			Path:    dirPath,
+		})
+
+	case "content":
+		filePath := r.URL.Query().Get("path")
+		if r.Method == http.MethodGet {
+			if filePath == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path parameter"})
+				return
+			}
+
+			// Security: validate path is within a base directory
+			valid, err := validatePathAgainstBaseDirectories(ctx, filePath)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to validate path"})
+				return
+			}
+			if !valid {
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Path is not within an allowed directory"})
+				return
+			}
+
+			// Check file info
+			info, err := os.Stat(filePath)
+			if err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "File not found"})
+				return
+			}
+
+			if info.IsDir() {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Path is a directory"})
+				return
+			}
+
+			// Limit file size to 5MB
+			const maxFileSize = 5 * 1024 * 1024
+			if info.Size() > maxFileSize {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "File too large (max 5MB)"})
+				return
+			}
+
+			// Check if binary
+			if isBinaryFile(filePath) {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Cannot edit binary files"})
+				return
+			}
+
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to read file"})
+				return
+			}
+
+			json.NewEncoder(w).Encode(FileContent{
+				Content: string(content),
+				Path:    filePath,
+				Size:    info.Size(),
+			})
+
+		} else if r.Method == http.MethodPost {
+			var body struct {
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Invalid JSON body"})
+				return
+			}
+
+			if body.Path == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Missing path"})
+				return
+			}
+
+			// Security: validate path is within a base directory
+			valid, err := validatePathAgainstBaseDirectories(ctx, body.Path)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Failed to validate path"})
+				return
+			}
+			if !valid {
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "Path is not within an allowed directory"})
+				return
+			}
+
+			// Write file
+			err = os.WriteFile(body.Path, []byte(body.Content), 0644)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": fmt.Sprintf("Failed to write file: %v", err)})
+				return
+			}
+
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "path": body.Path})
+
+		} else {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Method not allowed"})
+		}
+
+	default:
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Unknown files endpoint"})
 	}
 }
 

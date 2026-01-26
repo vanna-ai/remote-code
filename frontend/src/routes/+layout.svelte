@@ -30,6 +30,7 @@
 		{ label: 'Task Executions', href: '/task-executions', icon: 'tasks', badge: stats?.task_executions || undefined },
 		{ label: 'Agents', href: '/agents', icon: 'agents', badge: stats?.agents || undefined },
 		{ label: 'Directories', href: '/directories', icon: 'directories' },
+		{ label: 'Files', href: '/files', icon: 'files' },
 		{ label: 'Settings', href: '/settings', icon: 'settings' }
 	]);
 

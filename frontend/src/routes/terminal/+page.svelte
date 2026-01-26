@@ -109,6 +109,13 @@
 	}
 
 	function createTerminal(sessionType) {
+		// Wait for the terminal element to be available
+		if (!terminalElement) {
+			console.log('Terminal element not available yet, retrying...');
+			setTimeout(() => createTerminal(sessionType), 100);
+			return;
+		}
+
 		try {
 			if (!window.Terminal) {
 				throw new Error('Terminal library not loaded');

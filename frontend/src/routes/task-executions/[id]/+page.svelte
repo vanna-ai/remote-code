@@ -11,7 +11,7 @@
 		{ label: "", href: "/", icon: "banner" },
 		{ label: "Projects", href: "/projects" },
 		{ label: execution?.project_name || "Project", href: execution?.project_id ? `/projects/${execution.project_id}` : "/projects" },
-		{ label: execution?.task_title ? (execution.task_title.length > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/task-executions?task_id=${execution.task_id}` : "#" },
+		{ label: execution?.task_title ? ((execution.task_title?.length ?? 0) > 20 ? execution.task_title.substring(0, 20) + "..." : execution.task_title) : "Task", href: execution?.task_id ? `/task-executions?task_id=${execution.task_id}` : "#" },
 		{ label: execution?.agent_name || `Agent`, href: `/task-executions/${$page.params.id}` }
 	];
 
