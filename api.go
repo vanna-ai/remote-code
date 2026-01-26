@@ -526,6 +526,9 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 		gitDir := strings.TrimSpace(commonDirOut)
+		if !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(worktreeDir, gitDir)
+		}
 		basePath := filepath.Dir(gitDir)
 
 		// Ensure we are on main
@@ -611,6 +614,9 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 		gitDir := strings.TrimSpace(commonDirOut)
+		if !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(worktreeDir, gitDir)
+		}
 		basePath := filepath.Dir(gitDir)
 		// Base must be clean
 		baseStatus, _, _ := runGit(basePath, "status", "--porcelain")
@@ -796,6 +802,9 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 			return
 		}
 		gitDir := strings.TrimSpace(commonDirOut)
+		if !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(dir, gitDir)
+		}
 		basePath := filepath.Dir(gitDir)
 		// List worktrees in base repo and find the base worktree entry
 		wtOut, _, err := runGit(basePath, "worktree", "list", "--porcelain")
@@ -906,7 +915,10 @@ func handleDashboardAPI(w http.ResponseWriter, r *http.Request, ctx context.Cont
 	case "GET":
 		if len(pathParts) > 0 && pathParts[0] == "stats" {
 			// Get dashboard statistics
-			stats := DashboardStats{}
+			stats := DashboardStats{
+				GitChangesAwaitingReview: []TaskExecutionSummary{},
+				AgentsWaitingForInput:    []TaskExecutionSummary{},
+			}
 
 			// Count active tmux sessions
 			cmd := exec.Command("tmux", "list-sessions")
