@@ -4,11 +4,15 @@
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
 	import Header from '$lib/components/ui/Header.svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { auth } from '$lib/stores/auth';
 
 	let { children } = $props();
 	let sidebarCollapsed = $state(false);
 	let mobileMenuOpen = $state(false);
+	let authChecked = $state(false);
+	let isAuthenticated = $state(false);
 	let stats = $state({
 		active_sessions: 0,
 		projects: 0,
@@ -34,10 +38,44 @@
 		{ label: 'Settings', href: '/settings', icon: 'settings' }
 	]);
 
+	// Check if current page is the login page
+	let isLoginPage = $derived($page.url.pathname === '/login');
+
 	onMount(async () => {
-		await loadDashboardStats();
-		const interval = setInterval(loadDashboardStats, 10000);
-		return () => clearInterval(interval);
+		// Check authentication status
+		const status = await auth.checkStatus();
+		authChecked = true;
+
+		if (status) {
+			isAuthenticated = status.authenticated;
+
+			// If not authenticated, redirect to login page (for both setup and login)
+			if (!status.authenticated && !isLoginPage) {
+				goto('/login');
+				return;
+			}
+		}
+
+		// Only load dashboard stats if authenticated
+		if (isAuthenticated) {
+			await loadDashboardStats();
+			const interval = setInterval(loadDashboardStats, 10000);
+			return () => clearInterval(interval);
+		}
+	});
+
+	// React to auth store changes
+	$effect(() => {
+		const unsubscribe = auth.subscribe((state) => {
+			isAuthenticated = state.authenticated;
+
+			// Redirect to login if authentication is lost (except on login page)
+			if (authChecked && !state.loading && !state.authenticated && !isLoginPage) {
+				goto('/login');
+			}
+		});
+
+		return unsubscribe;
 	});
 
 	async function loadDashboardStats() {
@@ -90,27 +128,34 @@
 
 	<!-- Content -->
 	<div class="relative z-10">
-		<Sidebar
-			{navItems}
-			collapsed={sidebarCollapsed}
-			mobileOpen={mobileMenuOpen}
-			onCloseMobile={closeMobileMenu}
-		/>
-		<Header
-			{sidebarCollapsed}
-			onToggleSidebar={toggleSidebar}
-			onToggleMobile={toggleMobileMenu}
-			agentsWaitingForInput={stats.agents_waiting_for_input}
-		/>
-
-		<!-- Main content area -->
-		<main
-			class="transition-all duration-300 pt-16 lg:ml-64"
-			class:lg:ml-16={sidebarCollapsed}
-		>
-			<div class="p-4 lg:p-6">
+		{#if isLoginPage}
+			<!-- Login page - no sidebar or header -->
+			<main class="min-h-screen">
 				{@render children?.()}
-			</div>
-		</main>
+			</main>
+		{:else}
+			<Sidebar
+				{navItems}
+				collapsed={sidebarCollapsed}
+				mobileOpen={mobileMenuOpen}
+				onCloseMobile={closeMobileMenu}
+			/>
+			<Header
+				{sidebarCollapsed}
+				onToggleSidebar={toggleSidebar}
+				onToggleMobile={toggleMobileMenu}
+				agentsWaitingForInput={stats.agents_waiting_for_input}
+			/>
+
+			<!-- Main content area -->
+			<main
+				class="transition-all duration-300 pt-16 lg:ml-64"
+				class:lg:ml-16={sidebarCollapsed}
+			>
+				<div class="p-4 lg:p-6">
+					{@render children?.()}
+				</div>
+			</main>
+		{/if}
 	</div>
 </div>

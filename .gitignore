@@ -114,3 +114,4 @@ remote-code.db
 remote-code-test*.db
 app.db
 test.txt
+remote-code-backup.db

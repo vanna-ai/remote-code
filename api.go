@@ -843,10 +843,12 @@ func handleGitAPI(w http.ResponseWriter, r *http.Request, ctx context.Context, p
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Set CORS headers with dynamic origin for trycloudflare.com subdomains
+	corsOrigin := getCORSOrigin(r)
+	w.Header().Set("Access-Control-Allow-Origin", corsOrigin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method == "OPTIONS" {
@@ -866,6 +868,8 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	switch pathParts[0] {
+	case "auth":
+		handleAuthAPI(w, r, ctx, pathParts[1:])
 	case "dashboard":
 		handleDashboardAPI(w, r, ctx, pathParts[1:])
 	case "roots":

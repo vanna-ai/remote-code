@@ -6,6 +6,7 @@ package db
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Agent struct {
@@ -117,6 +118,12 @@ type Root struct {
 	UpdatedAt   sql.NullTime   `db:"updated_at" json:"updated_at"`
 }
 
+type Session struct {
+	Token     string       `db:"token" json:"token"`
+	ExpiresAt time.Time    `db:"expires_at" json:"expires_at"`
+	CreatedAt sql.NullTime `db:"created_at" json:"created_at"`
+}
+
 type Task struct {
 	ID              int64        `db:"id" json:"id"`
 	ProjectID       int64        `db:"project_id" json:"project_id"`
@@ -137,4 +144,15 @@ type TaskExecution struct {
 	DevServerTmuxID sql.NullString `db:"dev_server_tmux_id" json:"dev_server_tmux_id"`
 	CreatedAt       sql.NullTime   `db:"created_at" json:"created_at"`
 	UpdatedAt       sql.NullTime   `db:"updated_at" json:"updated_at"`
+}
+
+type WebauthnCredential struct {
+	ID              string         `db:"id" json:"id"`
+	RpID            string         `db:"rp_id" json:"rp_id"`
+	PublicKey       []byte         `db:"public_key" json:"public_key"`
+	AttestationType string         `db:"attestation_type" json:"attestation_type"`
+	Transport       sql.NullString `db:"transport" json:"transport"`
+	Aaguid          []byte         `db:"aaguid" json:"aaguid"`
+	SignCount       int64          `db:"sign_count" json:"sign_count"`
+	CreatedAt       sql.NullTime   `db:"created_at" json:"created_at"`
 }

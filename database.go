@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"remote-code/db"
@@ -114,6 +115,8 @@ func applyMigrations(database *sql.DB) error {
 		"db/migrations/002_elo_tracking.sql",
 		"db/migrations/003_remove_worktrees.sql",
 		"db/migrations/004_remote_ports.sql",
+		"db/migrations/005_webauthn.sql",
+		"db/migrations/006_webauthn_add_rp_id.sql",
 	}
 
 	for _, migrationPath := range migrations {
@@ -135,7 +138,13 @@ func applyMigrations(database *sql.DB) error {
 
 		_, err = database.Exec(string(migrationSQL))
 		if err != nil {
-			return fmt.Errorf("failed to execute migration %s: %v", migrationPath, err)
+			// Handle ALTER TABLE errors for columns that already exist
+			// This can happen when migration 006 runs on a fresh DB where 005 already created the column
+			if strings.Contains(err.Error(), "duplicate column name") {
+				log.Printf("Migration %s: column already exists, skipping", migrationPath)
+			} else {
+				return fmt.Errorf("failed to execute migration %s: %v", migrationPath, err)
+			}
 		}
 
 		// Record that migration was applied

@@ -32,16 +32,28 @@ func main() {
 
 	// Setup HTTP routes
 	http.HandleFunc("/", serveHome)
-	http.HandleFunc("/ws", handleWebSocket)
-	http.HandleFunc("/api/", handleAPI)
+	http.HandleFunc("/ws", authMiddleware(handleWebSocket))
+	http.HandleFunc("/api/", handleAPIWithAuth)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	
+
 	log.Printf("Server starting on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+// handleAPIWithAuth wraps the API handler with authentication where needed
+func handleAPIWithAuth(w http.ResponseWriter, r *http.Request) {
+	// Auth endpoints don't require authentication
+	if strings.HasPrefix(r.URL.Path, "/api/auth/") {
+		handleAPI(w, r)
+		return
+	}
+
+	// All other API endpoints require authentication
+	authMiddleware(handleAPI)(w, r)
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
