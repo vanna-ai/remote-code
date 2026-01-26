@@ -56,9 +56,9 @@
 		bind:value
 		class={classes}
 		style="background-image: {backgroundImage};"
-		on:change={onChange}
-		on:focus={onFocus}
-		on:blur={onBlur}
+		onchange={onChange}
+		onfocus={onFocus}
+		onblur={onBlur}
 	>
 		{#if placeholder}
 			<option value="" disabled hidden>{placeholder}</option>

@@ -3,39 +3,20 @@
 		sidebarCollapsed?: boolean;
 		onToggleSidebar?: () => void;
 		onToggleMobile?: () => void;
+		agentsWaitingForInput?: Array<{
+			id: number;
+			task_name: string;
+			project_name: string;
+			agent: string;
+		}>;
 	}
 
-	let { sidebarCollapsed = false, onToggleSidebar, onToggleMobile }: Props = $props();
+	let { sidebarCollapsed = false, onToggleSidebar, onToggleMobile, agentsWaitingForInput = [] }: Props = $props();
 
 	let showNotifications = $state(false);
 	let showUserMenu = $state(false);
 
-	// Mock notifications data
-	const notifications = [
-		{
-			id: 1,
-			title: 'Task Execution Completed',
-			message: 'Your task "Setup Development Environment" has completed successfully.',
-			time: '5 min ago',
-			read: false
-		},
-		{
-			id: 2,
-			title: 'New Project Created',
-			message: 'Project "E-commerce Platform" has been created.',
-			time: '1 hr ago',
-			read: false
-		},
-		{
-			id: 3,
-			title: 'Agent Status Update',
-			message: 'Agent "Development Assistant" is now online.',
-			time: '2 hrs ago',
-			read: true
-		}
-	];
-
-	const unreadCount = notifications.filter(n => !n.read).length;
+	let waitingCount = $derived(agentsWaitingForInput.length);
 </script>
 
 <header
@@ -106,9 +87,9 @@
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
 						</svg>
-						{#if unreadCount > 0}
-							<span class="absolute -top-0.5 -right-0.5 w-4 h-4 text-xs font-bold text-white bg-vanna-orange rounded-full flex items-center justify-center">
-								{unreadCount}
+						{#if waitingCount > 0}
+							<span class="absolute -top-0.5 -right-0.5 w-4 h-4 text-xs font-bold text-white bg-vanna-orange rounded-full flex items-center justify-center animate-pulse">
+								{waitingCount}
 							</span>
 						{/if}
 					</button>
@@ -116,27 +97,37 @@
 					{#if showNotifications}
 						<div class="absolute right-0 z-50 mt-2 w-80 bg-white rounded-2xl shadow-vanna-card border border-slate-200/60 overflow-hidden">
 							<div class="px-4 py-3 border-b border-slate-200 bg-vanna-cream/30">
-								<h3 class="text-sm font-semibold text-vanna-navy">Notifications</h3>
+								<h3 class="text-sm font-semibold text-vanna-navy">Agents Waiting for Input</h3>
 							</div>
 							<div class="max-h-64 overflow-y-auto">
-								{#each notifications as notification}
-									<div class="px-4 py-3 border-b border-slate-100 hover:bg-vanna-cream/30 cursor-pointer transition-colors {!notification.read ? 'bg-vanna-teal/5' : ''}">
-										<div class="flex items-start gap-3">
-											<div class="flex-1 min-w-0">
-												<p class="text-sm font-medium text-vanna-navy">{notification.title}</p>
-												<p class="text-sm text-slate-500 line-clamp-2">{notification.message}</p>
-												<p class="text-xs text-slate-400 mt-1">{notification.time}</p>
-											</div>
-											{#if !notification.read}
-												<div class="w-2 h-2 bg-vanna-teal rounded-full mt-1.5 flex-shrink-0"></div>
-											{/if}
-										</div>
+								{#if agentsWaitingForInput.length === 0}
+									<div class="px-4 py-6 text-center text-slate-500 text-sm">
+										No agents waiting for input
 									</div>
-								{/each}
+								{:else}
+									{#each agentsWaitingForInput as agent}
+										<a
+											href="/task-executions/{agent.id}"
+											class="block px-4 py-3 border-b border-slate-100 hover:bg-vanna-cream/30 transition-colors"
+											onclick={() => showNotifications = false}
+										>
+											<div class="flex items-start gap-3">
+												<div class="flex-1 min-w-0">
+													<p class="text-sm font-medium text-vanna-navy">{agent.project_name}</p>
+													<p class="text-sm text-slate-500 truncate">{agent.task_name}</p>
+													<p class="text-xs text-slate-400 mt-1">{agent.agent}</p>
+												</div>
+												<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-vanna-orange/10 text-vanna-orange flex-shrink-0">
+													Waiting
+												</span>
+											</div>
+										</a>
+									{/each}
+								{/if}
 							</div>
 							<div class="px-4 py-3 border-t border-slate-200 bg-vanna-cream/20">
-								<a href="/notifications" class="text-sm font-medium text-vanna-teal hover:text-vanna-teal/80 transition-colors">
-									View all notifications
+								<a href="/task-executions" class="text-sm font-medium text-vanna-teal hover:text-vanna-teal/80 transition-colors">
+									View all task executions
 								</a>
 							</div>
 						</div>

@@ -52,8 +52,9 @@
 			<button
 				onclick={() => showDropdown = !showDropdown}
 				class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-vanna-cream/50"
+				aria-label="Task options"
 			>
-				<svg class="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+				<svg class="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
 					<path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
 				</svg>
 			</button>

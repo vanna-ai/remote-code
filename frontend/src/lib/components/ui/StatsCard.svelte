@@ -87,13 +87,13 @@
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-slate-500">{title}</p>
-					<p class="text-2xl font-bold text-vanna-navy">
+					<div class="text-2xl font-bold text-vanna-navy">
 						{#if loading}
 							<div class="animate-pulse bg-slate-200 h-8 w-16 rounded"></div>
 						{:else}
 							{value}
 						{/if}
-					</p>
+					</div>
 				</div>
 				{#if trend}
 					<div class="flex items-center text-sm {trend.isPositive ? 'text-vanna-teal' : 'text-vanna-orange'}">

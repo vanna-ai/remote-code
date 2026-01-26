@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
+
 	interface Props {
 		value?: string;
 		placeholder?: string;
@@ -37,6 +39,10 @@
 		onBlur
 	}: Props = $props();
 
+	const formFieldContext = getContext<{ error: string; describedBy: string } | undefined>('formField');
+	let hasError = $derived(error || !!formFieldContext?.error);
+	let computedDescribedBy = $derived(formFieldContext?.describedBy);
+
 	const resizeClasses = {
 		none: 'resize-none',
 		both: 'resize',
@@ -48,7 +54,7 @@
 	const normalClasses = 'border-slate-300 bg-white text-vanna-navy focus:border-vanna-teal focus:ring-vanna-teal placeholder-slate-400';
 	const errorClasses = 'border-vanna-orange bg-vanna-orange/5 text-vanna-navy focus:border-vanna-orange focus:ring-vanna-orange';
 
-	let classes = $derived(`${baseClasses} ${resizeClasses[resize]} ${error ? errorClasses : normalClasses} ${className}`);
+	let classes = $derived(`${baseClasses} ${resizeClasses[resize]} ${hasError ? errorClasses : normalClasses} ${className}`);
 </script>
 
 <textarea
@@ -62,8 +68,10 @@
 	{cols}
 	bind:value
 	class={classes}
-	on:input={onInput}
-	on:change={onChange}
-	on:focus={onFocus}
-	on:blur={onBlur}
+	aria-invalid={hasError || undefined}
+	aria-describedby={computedDescribedBy || undefined}
+	oninput={onInput}
+	onchange={onChange}
+	onfocus={onFocus}
+	onblur={onBlur}
 ></textarea>

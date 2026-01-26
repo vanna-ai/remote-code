@@ -13,7 +13,13 @@
 		active_sessions: 0,
 		projects: 0,
 		task_executions: 0,
-		agents: 0
+		agents: 0,
+		agents_waiting_for_input: [] as Array<{
+			id: number;
+			task_name: string;
+			project_name: string;
+			agent: string;
+		}>
 	});
 
 	// Use $derived so navItems updates when stats changes
@@ -29,6 +35,8 @@
 
 	onMount(async () => {
 		await loadDashboardStats();
+		const interval = setInterval(loadDashboardStats, 10000);
+		return () => clearInterval(interval);
 	});
 
 	async function loadDashboardStats() {
@@ -91,6 +99,7 @@
 			{sidebarCollapsed}
 			onToggleSidebar={toggleSidebar}
 			onToggleMobile={toggleMobileMenu}
+			agentsWaitingForInput={stats.agents_waiting_for_input}
 		/>
 
 		<!-- Main content area -->

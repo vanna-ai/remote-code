@@ -133,9 +133,9 @@
 				<div class="space-y-4">
 					<div class="flex items-center justify-between">
 						<div>
-							<label class="text-sm font-medium text-vanna-navy">
+							<span class="text-sm font-medium text-vanna-navy">
 								Enable Notifications
-							</label>
+							</span>
 							<p class="text-sm text-slate-500">
 								Receive notifications for task completions and system events
 							</p>
@@ -152,9 +152,9 @@
 					</div>
 					<div class="flex items-center justify-between">
 						<div>
-							<label class="text-sm font-medium text-vanna-navy">
+							<span class="text-sm font-medium text-vanna-navy">
 								Auto-save Settings
-							</label>
+							</span>
 							<p class="text-sm text-slate-500">
 								Automatically save changes as you make them
 							</p>

@@ -457,9 +457,10 @@
 							{#if (gitStatus.stagedFiles?.length || 0) > 0}
 								<div class="space-y-1 max-h-48 overflow-y-auto">
 									{#each gitStatus.stagedFiles as file}
-										<div
-											class="flex items-center justify-between p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group {selectedFile?.path === file.path && selectedFile?.staged ? 'bg-vanna-teal/10' : ''}"
-											on:click={() => viewDiff(file, true)}
+										<button
+											type="button"
+											class="flex items-center justify-between w-full p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group text-left {selectedFile?.path === file.path && selectedFile?.staged ? 'bg-vanna-teal/10' : ''}"
+											onclick={() => viewDiff(file, true)}
 										>
 											<div class="flex items-center gap-2 min-w-0">
 												<span class="text-xs font-mono px-1.5 py-0.5 rounded {getFileStatusColor(file)} {getFileStatusBgColor(file)}">
@@ -476,7 +477,7 @@
 											>
 												{unstagingFile === file.path ? '...' : 'Unstage'}
 											</Button>
-										</div>
+										</button>
 									{/each}
 								</div>
 							{:else}
@@ -507,9 +508,10 @@
 							{#if (gitStatus.unstagedFiles?.length || 0) > 0}
 								<div class="space-y-1 max-h-48 overflow-y-auto">
 									{#each gitStatus.unstagedFiles as file}
-										<div
-											class="flex items-center justify-between p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group {selectedFile?.path === file.path && !selectedFile?.staged ? 'bg-vanna-orange/10' : ''}"
-											on:click={() => viewDiff(file, false)}
+										<button
+											type="button"
+											class="flex items-center justify-between w-full p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group text-left {selectedFile?.path === file.path && !selectedFile?.staged ? 'bg-vanna-orange/10' : ''}"
+											onclick={() => viewDiff(file, false)}
 										>
 											<div class="flex items-center gap-2 min-w-0">
 												<span class="text-xs font-mono px-1.5 py-0.5 rounded {getFileStatusColor(file)} {getFileStatusBgColor(file)}">
@@ -526,7 +528,7 @@
 											>
 												{stagingFile === file.path ? '...' : 'Stage'}
 											</Button>
-										</div>
+										</button>
 									{/each}
 								</div>
 							{:else}
@@ -547,9 +549,10 @@
 							{#if (gitStatus.untrackedFiles?.length || 0) > 0}
 								<div class="space-y-1 max-h-48 overflow-y-auto">
 									{#each gitStatus.untrackedFiles as file}
-										<div
-											class="flex items-center justify-between p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group {selectedFile?.path === file.path && selectedFile?.untracked ? 'bg-slate-200/50' : ''}"
-											on:click={() => viewDiff(file, false, true)}
+										<button
+											type="button"
+											class="flex items-center justify-between w-full p-2 rounded-lg hover:bg-vanna-cream/30 cursor-pointer group text-left {selectedFile?.path === file.path && selectedFile?.untracked ? 'bg-slate-200/50' : ''}"
+											onclick={() => viewDiff(file, false, true)}
 										>
 											<div class="flex items-center gap-2 min-w-0">
 												<span class="text-xs font-mono px-1.5 py-0.5 rounded text-slate-500 bg-vanna-cream/50">
@@ -575,7 +578,7 @@
 													{stagingFile === file.path ? '...' : 'Stage'}
 												</Button>
 											</div>
-										</div>
+										</button>
 									{/each}
 								</div>
 							{:else}
@@ -629,7 +632,7 @@
 											<input
 												type="checkbox"
 												checked={selectedTaskIds.has(task.id)}
-												on:change={() => toggleTaskSelection(task.id)}
+												onchange={() => toggleTaskSelection(task.id)}
 												class="rounded border-slate-300 text-vanna-teal focus:ring-vanna-teal"
 											/>
 											<span class="flex-1 text-sm text-vanna-navy truncate">{task.title}</span>

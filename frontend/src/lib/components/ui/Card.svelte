@@ -45,12 +45,20 @@
 	};
 
 	const hoverClasses = hover ? 'hover:-translate-y-1 hover:shadow-vanna-feature transition-all duration-200 cursor-pointer' : '';
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (onclick && (event.key === 'Enter' || event.key === ' ')) {
+			event.preventDefault();
+			onclick();
+		}
+	}
 </script>
 
 {#if onclick}
 <div
 	class="bg-white/80 backdrop-blur-sm {border ? 'border border-slate-200/60' : ''} {shadowClasses[shadow]} {roundedClasses[rounded]} {paddingClasses[padding]} {hoverClasses} {className}"
 	onclick={onclick}
+	onkeydown={handleKeydown}
 	role="button"
 	tabindex="0"
 >

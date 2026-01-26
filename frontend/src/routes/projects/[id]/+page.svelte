@@ -634,7 +634,7 @@
 		{:else if error}
 			<Card class="border-vanna-orange/30 bg-vanna-orange/5">
 				<div class="flex">
-					<svg class="w-5 h-5 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-5 h-5 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 					</svg>
 					<div class="ml-3">
@@ -651,7 +651,7 @@
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-4 mb-2">
 							<div class="w-12 h-12 bg-vanna-teal rounded-xl flex items-center justify-center">
-								<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
 								</svg>
 							</div>
@@ -671,13 +671,13 @@
 						<div class="flex bg-vanna-cream/50 rounded-lg p-1">
 							<button
 								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'kanban' ? 'bg-vanna-teal text-white' : 'text-vanna-navy hover:text-vanna-teal'}"
-								on:click={() => viewMode = 'kanban'}
+								onclick={() => viewMode = 'kanban'}
 							>
 								Kanban
 							</button>
 							<button
 								class="px-3 py-1 rounded text-sm transition-colors {viewMode === 'list' ? 'bg-vanna-teal text-white' : 'text-vanna-navy hover:text-vanna-teal'}"
-								on:click={() => viewMode = 'list'}
+								onclick={() => viewMode = 'list'}
 							>
 								List
 							</button>
@@ -687,7 +687,7 @@
 							variant="success"
 							onclick={() => showCreateDirectoryForm = true}
 						>
-							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 							</svg>
 							Add Directory
@@ -700,7 +700,7 @@
 								setDefaultBaseDirectory();
 							}}
 						>
-							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 							</svg>
 							New Task
@@ -712,7 +712,7 @@
 							disabled={deletingProject}
 							loading={deletingProject}
 						>
-							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 							</svg>
 							{deletingProject ? 'Deleting...' : 'Delete Project'}
@@ -724,7 +724,7 @@
 
 		<!-- Create Task Modal -->
 		<Modal open={showCreateTaskForm} title="Create New Task" onClose={() => showCreateTaskForm = false}>
-		<form on:submit|preventDefault={createTask} class="space-y-6">
+		<form onsubmit={(e) => { e.preventDefault(); createTask(); }} class="space-y-6">
 		<FormField label="Task Title" id="task-title" required>
 		 <Input 
 		 id="task-title"
@@ -772,7 +772,7 @@
 		
 		<div class="flex gap-3 pt-4">
 		<Button type="submit" variant="primary">
-		<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 		 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 		</svg>
 		Create Task
@@ -790,7 +790,7 @@
 
 		<!-- Create Directory Form -->
 		<Modal open={showCreateDirectoryForm} title="Add Base Directory" onClose={() => showCreateDirectoryForm = false}>
-			<form on:submit|preventDefault={createDirectory} class="space-y-6">
+			<form onsubmit={(e) => { e.preventDefault(); createDirectory(); }} class="space-y-6">
 				<FormField label="Directory Path" id="directory-path" required>
 					<Input 
 						id="directory-path"
@@ -853,7 +853,7 @@
 				
 				<div class="flex gap-3 pt-4">
 					<Button type="submit" variant="success">
-						<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 						</svg>
 						Add Directory
@@ -873,7 +873,7 @@
 		{#if project && (project.baseDirectories || []).length > 0}
 			<Card>
 				<h3 class="text-lg font-semibold text-vanna-navy mb-4 flex items-center gap-2">
-					<svg class="w-5 h-5 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-5 h-5 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 					</svg>
 					Base Directories
@@ -884,7 +884,7 @@
 						<div class="bg-vanna-cream/30 rounded-lg p-4 border border-slate-200">
 							<div class="flex items-center justify-between mb-2">
 								<div class="flex items-center gap-2">
-									<svg class="w-4 h-4 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg class="w-4 h-4 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 									</svg>
 									<span class="font-mono text-sm text-vanna-teal break-all">{directory.path}</span>
@@ -899,8 +899,9 @@
 										onclick={() => startEditDirectory(directory)}
 										variant="ghost"
 										size="sm"
+										title="Edit directory"
 									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 										</svg>
 									</IconButton>
@@ -909,8 +910,9 @@
 										variant="ghost"
 										size="sm"
 										class="text-vanna-orange hover:text-vanna-orange/80"
+										title="Delete directory"
 									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 										</svg>
 									</IconButton>
@@ -935,7 +937,7 @@
 									<div class="mt-3 pt-3 border-t border-slate-200">
 										<div class="flex items-center justify-between">
 											<div class="flex items-center gap-2 text-sm">
-												<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14M5 12h14"/>
 												</svg>
 												<span class="text-vanna-navy">{gitStatus.currentBranch || 'main'}</span>
@@ -955,7 +957,7 @@
 													href="/git/{directory.id}"
 													class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-vanna-orange bg-vanna-orange/10 rounded hover:bg-vanna-orange/20 transition-colors"
 												>
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
 													</svg>
 													{(gitStatus.stagedFiles?.length || 0) + (gitStatus.unstagedFiles?.length || 0) + (gitStatus.untrackedFiles?.length || 0)} changes
@@ -1033,7 +1035,7 @@
 		{:else if error}
 			<div class="text-center py-12">
 				<div class="w-16 h-16 bg-vanna-orange/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-					<svg class="w-8 h-8 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-8 h-8 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 					</svg>
 				</div>
@@ -1048,41 +1050,49 @@
 				<Card>
 					<div class="flex items-center gap-2 mb-4">
 						<div class="w-3 h-3 rounded-full bg-slate-400"></div>
-						<h3 class="font-semibold text-vanna-navy">To Do</h3>
+						<h2 class="font-semibold text-vanna-navy">To Do</h2>
 						<span class="text-sm text-slate-500">({todoTasks.length})</span>
 					</div>
 					<div class="space-y-3">
 						{#each todoTasks as task}
 							<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
 								<div class="flex items-start justify-between mb-1">
-									<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+									<button
+										type="button"
+										class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors text-left"
+										onclick={() => selectTask(task)}
+									>
 										{task.title}
-									</h4>
+									</button>
 									<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
-											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80" title="Edit task">
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 											</svg>
 										</IconButton>
 										<div class="relative">
-											<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+											<select value={task.status} onchange={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" onclick={(e) => e.stopPropagation()} aria-label="Change task status">
 												{#each columns as col}
 													<option value={col.id}>{col.title}</option>
 												{/each}
 											</select>
 										</div>
-										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80" title="Delete task">
 											{#if deletingTasks.has(task.id)}
 												<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
 											{:else}
-												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 												</svg>
 											{/if}
 										</IconButton>
 									</div>
 								</div>
-								<div class="cursor-pointer" on:click={() => selectTask(task)}>
+								<button
+									type="button"
+									class="cursor-pointer text-left w-full"
+									onclick={() => selectTask(task)}
+								>
 									{#if task.description}
 										<p class="text-sm text-slate-600 mb-2">{task.description}</p>
 									{/if}
@@ -1090,8 +1100,8 @@
 										<div class="mb-2">
 											<div class="flex flex-wrap gap-1">
 												{#each taskExecutions.get(task.id) as execution}
-													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
-														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" onclick={(e) => e.stopPropagation()}>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 														</svg>
 														{execution.agent_name}
@@ -1101,12 +1111,12 @@
 										</div>
 									{/if}
 									<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
-								</div>
+								</button>
 							</div>
 						{/each}
 						{#if todoTasks.length === 0}
 							<EmptyState>
-								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
 								<p class="text-sm">No tasks</p>
@@ -1119,41 +1129,49 @@
 				<Card>
 					<div class="flex items-center gap-2 mb-4">
 						<div class="w-3 h-3 rounded-full bg-vanna-magenta"></div>
-						<h3 class="font-semibold text-vanna-navy">In Progress</h3>
+						<h2 class="font-semibold text-vanna-navy">In Progress</h2>
 						<span class="text-sm text-slate-500">({inProgressTasks.length})</span>
 					</div>
 					<div class="space-y-3">
 						{#each inProgressTasks as task}
 							<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
 								<div class="flex items-start justify-between mb-1">
-									<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+									<button
+										type="button"
+										class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors text-left"
+										onclick={() => selectTask(task)}
+									>
 										{task.title}
-									</h4>
+									</button>
 									<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
-											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80" title="Edit task">
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 											</svg>
 										</IconButton>
 										<div class="relative">
-											<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+											<select value={task.status} onchange={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" onclick={(e) => e.stopPropagation()} aria-label="Change task status">
 												{#each columns as col}
 													<option value={col.id}>{col.title}</option>
 												{/each}
 											</select>
 										</div>
-										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80" title="Delete task">
 											{#if deletingTasks.has(task.id)}
 												<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
 											{:else}
-												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 												</svg>
 											{/if}
 										</IconButton>
 									</div>
 								</div>
-								<div class="cursor-pointer" on:click={() => selectTask(task)}>
+								<button
+									type="button"
+									class="cursor-pointer text-left w-full"
+									onclick={() => selectTask(task)}
+								>
 									{#if task.description}
 										<p class="text-sm text-slate-600 mb-2">{task.description}</p>
 									{/if}
@@ -1161,8 +1179,8 @@
 										<div class="mb-2">
 											<div class="flex flex-wrap gap-1">
 												{#each taskExecutions.get(task.id) as execution}
-													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
-														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" onclick={(e) => e.stopPropagation()}>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 														</svg>
 														{execution.agent_name}
@@ -1172,12 +1190,12 @@
 										</div>
 									{/if}
 									<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
-								</div>
+								</button>
 							</div>
 						{/each}
 						{#if inProgressTasks.length === 0}
 							<EmptyState>
-								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
 								<p class="text-sm">No tasks</p>
@@ -1192,41 +1210,49 @@
 					<Card>
 						<div class="flex items-center gap-2 mb-4">
 							<div class="w-3 h-3 rounded-full bg-vanna-orange"></div>
-							<h3 class="font-semibold text-vanna-navy">To Verify</h3>
+							<h2 class="font-semibold text-vanna-navy">To Verify</h2>
 							<span class="text-sm text-slate-500">({toVerifyTasks.length})</span>
 						</div>
 						<div class="space-y-3">
 							{#each toVerifyTasks as task}
 								<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
 									<div class="flex items-start justify-between mb-1">
-										<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+										<button
+											type="button"
+											class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors text-left"
+											onclick={() => selectTask(task)}
+										>
 											{task.title}
-										</h4>
+										</button>
 										<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
-												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80" title="Edit task">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 												</svg>
 											</IconButton>
 											<div class="relative">
-												<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+												<select value={task.status} onchange={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" onclick={(e) => e.stopPropagation()} aria-label="Change task status">
 													{#each columns as col}
 														<option value={col.id}>{col.title}</option>
 													{/each}
 												</select>
 											</div>
-											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80" title="Delete task">
 												{#if deletingTasks.has(task.id)}
 													<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
 												{:else}
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 													</svg>
 												{/if}
 											</IconButton>
 										</div>
 									</div>
-									<div class="cursor-pointer" on:click={() => selectTask(task)}>
+									<button
+										type="button"
+										class="cursor-pointer text-left w-full"
+										onclick={() => selectTask(task)}
+									>
 										{#if task.description}
 											<p class="text-sm text-slate-600 mb-2">{task.description}</p>
 										{/if}
@@ -1234,8 +1260,8 @@
 											<div class="mb-2">
 												<div class="flex flex-wrap gap-1">
 													{#each taskExecutions.get(task.id) as execution}
-														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
-															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" onclick={(e) => e.stopPropagation()}>
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 															</svg>
 															{execution.agent_name}
@@ -1245,12 +1271,12 @@
 											</div>
 										{/if}
 										<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
-									</div>
+									</button>
 								</div>
 							{/each}
 							{#if toVerifyTasks.length === 0}
 								<EmptyState>
-									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 									</svg>
 									<p class="text-sm">No tasks</p>
@@ -1263,41 +1289,49 @@
 					<Card>
 						<div class="flex items-center gap-2 mb-4">
 							<div class="w-3 h-3 rounded-full bg-vanna-teal"></div>
-							<h3 class="font-semibold text-vanna-navy">Done</h3>
+							<h2 class="font-semibold text-vanna-navy">Done</h2>
 							<span class="text-sm text-slate-500">({doneTasks.length})</span>
 						</div>
 						<div class="space-y-3">
 							{#each doneTasks as task}
 								<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
 									<div class="flex items-start justify-between mb-1">
-										<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+										<button
+											type="button"
+											class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors text-left"
+											onclick={() => selectTask(task)}
+										>
 											{task.title}
-										</h4>
+										</button>
 										<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
-												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80" title="Edit task">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 												</svg>
 											</IconButton>
 											<div class="relative">
-												<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+												<select value={task.status} onchange={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" onclick={(e) => e.stopPropagation()} aria-label="Change task status">
 													{#each columns as col}
 														<option value={col.id}>{col.title}</option>
 													{/each}
 												</select>
 											</div>
-											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80" title="Delete task">
 												{#if deletingTasks.has(task.id)}
 													<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
 												{:else}
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 													</svg>
 												{/if}
 											</IconButton>
 										</div>
 									</div>
-									<div class="cursor-pointer" on:click={() => selectTask(task)}>
+									<button
+										type="button"
+										class="cursor-pointer text-left w-full"
+										onclick={() => selectTask(task)}
+									>
 										{#if task.description}
 											<p class="text-sm text-slate-600 mb-2">{task.description}</p>
 										{/if}
@@ -1305,8 +1339,8 @@
 											<div class="mb-2">
 												<div class="flex flex-wrap gap-1">
 													{#each taskExecutions.get(task.id) as execution}
-														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
-															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" onclick={(e) => e.stopPropagation()}>
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 															</svg>
 															{execution.agent_name}
@@ -1316,12 +1350,12 @@
 											</div>
 										{/if}
 										<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
-									</div>
+									</button>
 								</div>
 							{/each}
 							{#if doneTasks.length === 0}
 								<EmptyState>
-									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 									</svg>
 									<p class="text-sm">No tasks</p>
@@ -1341,7 +1375,7 @@
 					{#if (project.tasks || []).length === 0}
 						<EmptyState>
 							<div class="w-16 h-16 bg-vanna-teal/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-								<svg class="w-8 h-8 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-8 h-8 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
 								</svg>
 							</div>
@@ -1355,7 +1389,11 @@
 									class="p-4 hover:bg-vanna-cream/30 transition-colors group"
 								>
 									<div class="flex items-start justify-between">
-										<div class="flex-1 cursor-pointer" on:click={() => selectTask(task)}>
+										<button
+											type="button"
+											class="flex-1 cursor-pointer text-left"
+											onclick={() => selectTask(task)}
+										>
 											<h4 class="font-medium text-vanna-navy mb-1">{task.title}</h4>
 											{#if task.description}
 												<p class="text-sm text-slate-600 mb-2">{task.description}</p>
@@ -1369,9 +1407,9 @@
 															<a
 																href="/task-executions/{execution.id}"
 																class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors"
-																on:click|stopPropagation
+																onclick={(e) => e.stopPropagation()}
 															>
-																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 																</svg>
 																{execution.agent_name}
@@ -1384,7 +1422,7 @@
 											<div class="text-xs text-slate-500 mt-1">
 												📁 {task.baseDirectory?.path || 'No base directory'}
 											</div>
-										</div>
+										</button>
 
 										<div class="flex items-center gap-3 ml-4">
 											<!-- Status Badge -->
@@ -1402,8 +1440,9 @@
 													variant="ghost"
 													size="sm"
 													class="text-vanna-teal hover:text-vanna-teal/80"
+													title="Edit task"
 												>
-													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
 													</svg>
 												</IconButton>
@@ -1411,10 +1450,11 @@
 												<!-- Status Change Dropdown -->
 												<select
 													value={task.status}
-													on:change={(e) => updateTaskStatus(task, e.target.value)}
+													onchange={(e) => updateTaskStatus(task, e.target.value)}
 													disabled={updatingTasks.has(task.id)}
 													class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50"
-													on:click|stopPropagation
+													onclick={(e) => e.stopPropagation()}
+													aria-label="Change task status"
 												>
 													{#each columns as col}
 														<option value={col.id}>{col.title}</option>
@@ -1428,11 +1468,12 @@
 													variant="ghost"
 													size="sm"
 													class="text-vanna-orange hover:text-vanna-orange/80"
+													title="Delete task"
 												>
 													{#if deletingTasks.has(task.id)}
 														<div class="animate-spin rounded-full h-4 w-4 border-b border-current"></div>
 													{:else}
-														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 														</svg>
 													{/if}
@@ -1471,7 +1512,7 @@
 					<h4 class="text-sm font-medium text-vanna-navy mb-2">Base Directory</h4>
 					<div class="bg-vanna-cream/30 rounded-lg p-3 border border-slate-200">
 						<div class="flex items-center gap-2 mb-2">
-							<svg class="w-4 h-4 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg class="w-4 h-4 text-vanna-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H7.5L5 5H3v2z"/>
 							</svg>
 							<span class="font-mono text-sm text-vanna-teal">{selectedTask.baseDirectory?.path || 'No path'}</span>
@@ -1504,7 +1545,7 @@
 								<div class="bg-vanna-orange/5 rounded-lg p-3 border border-vanna-orange/30">
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-2">
-											<svg class="w-4 h-4 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-4 h-4 text-vanna-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/>
 											</svg>
 											<span class="text-vanna-navy font-medium">{execution.agent_name}</span>
@@ -1540,7 +1581,7 @@
 										<input
 											type="checkbox"
 											checked={selectedAgents.some(a => a.id === agent.id)}
-											on:change={() => toggleAgentSelection(agent)}
+											onchange={() => toggleAgentSelection(agent)}
 											class="w-4 h-4 text-vanna-teal bg-white border-slate-300 rounded focus:ring-vanna-teal focus:ring-2"
 										/>
 										<div class="flex-1">
@@ -1564,7 +1605,7 @@
 								variant="primary"
 								class="w-full"
 							>
-								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h1m4 0h1m-2-4h.01M12 16h.01M12 8h.01M12 12h.01"/>
 								</svg>
 								{executingTask ? 'Starting Execution...' : `Start Execution (${selectedAgents.length})`}
@@ -1577,7 +1618,7 @@
 								href="/agents"
 								variant="warning"
 							>
-								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
 								</svg>
 								Configure Agents
@@ -1592,7 +1633,7 @@
 <!-- Task Edit Modal -->
 <Modal open={showEditTaskModal && editingTask} title="Edit Task" size="lg" onClose={closeEditTaskModal}>
 	{#if editingTask}
-		<form on:submit|preventDefault={saveTaskEdit} class="space-y-6">
+		<form onsubmit={(e) => { e.preventDefault(); saveTaskEdit(); }} class="space-y-6">
 			<FormField label="Task Title" id="edit-task-title" required>
 				<Input 
 					id="edit-task-title"
@@ -1639,13 +1680,13 @@
 			</FormField>
 			
 			<div class="flex gap-3 pt-4">
-				<Button 
+				<Button
 					type="submit"
 					disabled={updatingTasks.has(editingTask.id)}
 					loading={updatingTasks.has(editingTask.id)}
 					variant="primary"
 				>
-					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
 					</svg>
 					{updatingTasks.has(editingTask.id) ? 'Saving...' : 'Save Changes'}
