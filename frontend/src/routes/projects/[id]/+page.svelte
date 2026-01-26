@@ -63,6 +63,7 @@
 	const columns = [
 		{ id: 'todo', title: 'To Do', color: 'bg-slate-400' },
 		{ id: 'in_progress', title: 'In Progress', color: 'bg-vanna-magenta' },
+		{ id: 'to_verify', title: 'To Verify', color: 'bg-vanna-orange' },
 		{ id: 'done', title: 'Done', color: 'bg-vanna-teal' }
 	];
 	
@@ -84,7 +85,8 @@
 	}
 	
 	$: todoTasks = (project && !loading) ? getTasksByStatus('todo') : [];
-	$: inProgressTasks = (project && !loading) ? getTasksByStatus('in_progress') : [];  
+	$: inProgressTasks = (project && !loading) ? getTasksByStatus('in_progress') : [];
+	$: toVerifyTasks = (project && !loading) ? getTasksByStatus('to_verify') : [];
 	$: doneTasks = (project && !loading) ? getTasksByStatus('done') : [];
 	
 	$: {
@@ -1039,91 +1041,200 @@
 				<p class="text-slate-500 mb-4">Unable to load project details</p>
 			</div>
 		{:else if project}
-			{#if viewMode === 'kanban'}
-				<!-- Kanban View -->
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-					{#each columns as column}
-						<Card>
-							<div class="flex items-center gap-2 mb-4">
-								<div class="w-3 h-3 rounded-full {column.color}"></div>
-								<h3 class="font-semibold text-vanna-navy">{column.title}</h3>
-								<span class="text-sm text-slate-500">({column.id === 'todo' ? todoTasks.length : column.id === 'in_progress' ? inProgressTasks.length : doneTasks.length})</span>
-							</div>
-							
-							<div class="space-y-3">
-								{#each column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks as task}
-									<div
-										class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group"
-									>
-										<div class="flex items-start justify-between mb-1">
-											<h4
-												class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors"
-												on:click={() => selectTask(task)}
-											>
-												{task.title}
-											</h4>
-											<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
-												<!-- Edit Button -->
-												<IconButton
-													onclick={() => openEditTaskModal(task)}
-													variant="ghost"
-													size="xs"
-													class="text-vanna-teal hover:text-vanna-teal/80"
-												>
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-													</svg>
-												</IconButton>
-
-												<!-- Status Change Dropdown -->
-												<div class="relative">
-													<select
-														value={task.status}
-														on:change={(e) => updateTaskStatus(task, e.target.value)}
-														disabled={updatingTasks.has(task.id)}
-														class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50"
-														on:click|stopPropagation
-													>
-														{#each columns as col}
-															<option value={col.id}>{col.title}</option>
-														{/each}
-													</select>
-												</div>
-
-												<!-- Delete Button -->
-												<IconButton
-													onclick={() => deleteTask(task)}
-													disabled={deletingTasks.has(task.id)}
-													variant="ghost"
-													size="xs"
-													class="text-vanna-orange hover:text-vanna-orange/80"
-												>
-													{#if deletingTasks.has(task.id)}
-														<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
-													{:else}
+		{#if viewMode === 'kanban'}
+			<!-- Kanban View -->
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+				<!-- To Do Column -->
+				<Card>
+					<div class="flex items-center gap-2 mb-4">
+						<div class="w-3 h-3 rounded-full bg-slate-400"></div>
+						<h3 class="font-semibold text-vanna-navy">To Do</h3>
+						<span class="text-sm text-slate-500">({todoTasks.length})</span>
+					</div>
+					<div class="space-y-3">
+						{#each todoTasks as task}
+							<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
+								<div class="flex items-start justify-between mb-1">
+									<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+										{task.title}
+									</h4>
+									<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+											</svg>
+										</IconButton>
+										<div class="relative">
+											<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+												{#each columns as col}
+													<option value={col.id}>{col.title}</option>
+												{/each}
+											</select>
+										</div>
+										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+											{#if deletingTasks.has(task.id)}
+												<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+											{:else}
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+												</svg>
+											{/if}
+										</IconButton>
+									</div>
+								</div>
+								<div class="cursor-pointer" on:click={() => selectTask(task)}>
+									{#if task.description}
+										<p class="text-sm text-slate-600 mb-2">{task.description}</p>
+									{/if}
+									{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
+										<div class="mb-2">
+											<div class="flex flex-wrap gap-1">
+												{#each taskExecutions.get(task.id) as execution}
+													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
 														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 														</svg>
-													{/if}
-												</IconButton>
+														{execution.agent_name}
+													</a>
+												{/each}
 											</div>
 										</div>
+									{/if}
+									<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
+								</div>
+							</div>
+						{/each}
+						{#if todoTasks.length === 0}
+							<EmptyState>
+								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+								</svg>
+								<p class="text-sm">No tasks</p>
+							</EmptyState>
+						{/if}
+					</div>
+				</Card>
 
-										<div class="cursor-pointer" on:click={() => selectTask(task)}>
-											{#if task.description}
-												<p class="text-sm text-slate-600 mb-2">{task.description}</p>
+				<!-- In Progress Column -->
+				<Card>
+					<div class="flex items-center gap-2 mb-4">
+						<div class="w-3 h-3 rounded-full bg-vanna-magenta"></div>
+						<h3 class="font-semibold text-vanna-navy">In Progress</h3>
+						<span class="text-sm text-slate-500">({inProgressTasks.length})</span>
+					</div>
+					<div class="space-y-3">
+						{#each inProgressTasks as task}
+							<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
+								<div class="flex items-start justify-between mb-1">
+									<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+										{task.title}
+									</h4>
+									<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+										<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
+											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+											</svg>
+										</IconButton>
+										<div class="relative">
+											<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+												{#each columns as col}
+													<option value={col.id}>{col.title}</option>
+												{/each}
+											</select>
+										</div>
+										<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+											{#if deletingTasks.has(task.id)}
+												<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+											{:else}
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+												</svg>
 											{/if}
+										</IconButton>
+									</div>
+								</div>
+								<div class="cursor-pointer" on:click={() => selectTask(task)}>
+									{#if task.description}
+										<p class="text-sm text-slate-600 mb-2">{task.description}</p>
+									{/if}
+									{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
+										<div class="mb-2">
+											<div class="flex flex-wrap gap-1">
+												{#each taskExecutions.get(task.id) as execution}
+													<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+														</svg>
+														{execution.agent_name}
+													</a>
+												{/each}
+											</div>
+										</div>
+									{/if}
+									<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
+								</div>
+							</div>
+						{/each}
+						{#if inProgressTasks.length === 0}
+							<EmptyState>
+								<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+								</svg>
+								<p class="text-sm">No tasks</p>
+							</EmptyState>
+						{/if}
+					</div>
+				</Card>
 
-										<!-- Task Executions -->
+				<!-- Stacked To Verify + Done Column -->
+				<div class="flex flex-col gap-6">
+					<!-- To Verify -->
+					<Card>
+						<div class="flex items-center gap-2 mb-4">
+							<div class="w-3 h-3 rounded-full bg-vanna-orange"></div>
+							<h3 class="font-semibold text-vanna-navy">To Verify</h3>
+							<span class="text-sm text-slate-500">({toVerifyTasks.length})</span>
+						</div>
+						<div class="space-y-3">
+							{#each toVerifyTasks as task}
+								<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
+									<div class="flex items-start justify-between mb-1">
+										<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+											{task.title}
+										</h4>
+										<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+												</svg>
+											</IconButton>
+											<div class="relative">
+												<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+													{#each columns as col}
+														<option value={col.id}>{col.title}</option>
+													{/each}
+												</select>
+											</div>
+											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+												{#if deletingTasks.has(task.id)}
+													<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+												{:else}
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+													</svg>
+												{/if}
+											</IconButton>
+										</div>
+									</div>
+									<div class="cursor-pointer" on:click={() => selectTask(task)}>
+										{#if task.description}
+											<p class="text-sm text-slate-600 mb-2">{task.description}</p>
+										{/if}
 										{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
 											<div class="mb-2">
 												<div class="flex flex-wrap gap-1">
 													{#each taskExecutions.get(task.id) as execution}
-														<a
-															href="/task-executions/{execution.id}"
-															class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors"
-															on:click|stopPropagation
-														>
+														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
 															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 															</svg>
@@ -1133,27 +1244,94 @@
 												</div>
 											</div>
 										{/if}
+										<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
+									</div>
+								</div>
+							{/each}
+							{#if toVerifyTasks.length === 0}
+								<EmptyState>
+									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+									</svg>
+									<p class="text-sm">No tasks</p>
+								</EmptyState>
+							{/if}
+						</div>
+					</Card>
 
-											<div class="text-xs text-slate-500 mt-2">
-												📁 {task.baseDirectory?.path || 'No base directory'}
+					<!-- Done -->
+					<Card>
+						<div class="flex items-center gap-2 mb-4">
+							<div class="w-3 h-3 rounded-full bg-vanna-teal"></div>
+							<h3 class="font-semibold text-vanna-navy">Done</h3>
+							<span class="text-sm text-slate-500">({doneTasks.length})</span>
+						</div>
+						<div class="space-y-3">
+							{#each doneTasks as task}
+								<div class="bg-white rounded-lg p-3 border border-slate-200 hover:border-vanna-teal/30 hover:shadow-md transition-all group">
+									<div class="flex items-start justify-between mb-1">
+										<h4 class="font-medium text-vanna-navy flex-1 cursor-pointer hover:text-vanna-teal transition-colors" on:click={() => selectTask(task)}>
+											{task.title}
+										</h4>
+										<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+											<IconButton onclick={() => openEditTaskModal(task)} variant="ghost" size="xs" class="text-vanna-teal hover:text-vanna-teal/80">
+												<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+												</svg>
+											</IconButton>
+											<div class="relative">
+												<select value={task.status} on:change={(e) => updateTaskStatus(task, e.target.value)} disabled={updatingTasks.has(task.id)} class="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-vanna-navy hover:bg-vanna-cream/30 transition-colors disabled:opacity-50" on:click|stopPropagation>
+													{#each columns as col}
+														<option value={col.id}>{col.title}</option>
+													{/each}
+												</select>
 											</div>
+											<IconButton onclick={() => deleteTask(task)} disabled={deletingTasks.has(task.id)} variant="ghost" size="xs" class="text-vanna-orange hover:text-vanna-orange/80">
+												{#if deletingTasks.has(task.id)}
+													<div class="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+												{:else}
+													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+													</svg>
+												{/if}
+											</IconButton>
 										</div>
 									</div>
-								{/each}
-								
-								{#if (column.id === 'todo' ? todoTasks : column.id === 'in_progress' ? inProgressTasks : doneTasks).length === 0}
-									<EmptyState>
-										<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-										</svg>
-										<p class="text-sm">No tasks</p>
-									</EmptyState>
-								{/if}
-							</div>
-						</Card>
-					{/each}
+									<div class="cursor-pointer" on:click={() => selectTask(task)}>
+										{#if task.description}
+											<p class="text-sm text-slate-600 mb-2">{task.description}</p>
+										{/if}
+										{#if taskExecutions.has(task.id) && taskExecutions.get(task.id).length > 0}
+											<div class="mb-2">
+												<div class="flex flex-wrap gap-1">
+													{#each taskExecutions.get(task.id) as execution}
+														<a href="/task-executions/{execution.id}" class="inline-flex items-center gap-1 bg-vanna-magenta/10 hover:bg-vanna-magenta/20 text-vanna-magenta px-2 py-1 rounded text-xs transition-colors" on:click|stopPropagation>
+															<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+															</svg>
+															{execution.agent_name}
+														</a>
+													{/each}
+												</div>
+											</div>
+										{/if}
+										<div class="text-xs text-slate-500 mt-2">📁 {task.baseDirectory?.path || 'No base directory'}</div>
+									</div>
+								</div>
+							{/each}
+							{#if doneTasks.length === 0}
+								<EmptyState>
+									<svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+									</svg>
+									<p class="text-sm">No tasks</p>
+								</EmptyState>
+							{/if}
+						</div>
+					</Card>
 				</div>
-			{:else}
+			</div>
+		{:else}
 				<!-- List View -->
 				<Card>
 					<div class="p-4 border-b border-slate-200">

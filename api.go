@@ -1706,12 +1706,6 @@ func handleTaskExecutionsAPI(w http.ResponseWriter, r *http.Request, ctx context
 		return
 	}
 
-	// Handle sub-endpoints like /api/task-executions/{id}/reject
-	if len(pathParts) >= 2 && pathParts[1] == "reject" {
-		handleRejectTaskExecution(w, r, ctx, pathParts)
-		return
-	}
-
 	// Handle sub-endpoints like /api/task-executions/{id}/accept
 	if len(pathParts) >= 2 && pathParts[1] == "accept" {
 		handleAcceptTaskExecution(w, r, ctx, pathParts)
@@ -2218,57 +2212,6 @@ func handleResendTaskToSession(w http.ResponseWriter, r *http.Request, ctx conte
 	json.NewEncoder(w).Encode(response)
 }
 
-func handleRejectTaskExecution(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if len(pathParts) < 1 {
-		http.Error(w, "Task execution ID required", http.StatusBadRequest)
-		return
-	}
-
-	executionID, err := strconv.ParseInt(pathParts[0], 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
-		return
-	}
-
-	// Get the task execution to check current status
-	execution, err := queries.GetTaskExecutionWithDetails(ctx, executionID)
-	if err != nil {
-		log.Printf("Failed to get task execution: %v", err)
-		http.Error(w, "Task execution not found", http.StatusNotFound)
-		return
-	}
-
-	// Check if already rejected
-	if execution.Status == "rejected" {
-		http.Error(w, "Task execution is already rejected", http.StatusBadRequest)
-		return
-	}
-
-	// Update status to "rejected"
-	_, err = queries.UpdateTaskExecutionStatus(ctx, db.UpdateTaskExecutionStatusParams{
-		ID:     executionID,
-		Status: "rejected",
-	})
-	if err != nil {
-		log.Printf("Failed to update task execution status: %v", err)
-		http.Error(w, "Failed to reject task execution", http.StatusInternalServerError)
-		return
-	}
-
-	// Return success response
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Task execution rejected successfully",
-		"status":  "rejected",
-	}
-	json.NewEncoder(w).Encode(response)
-}
-
 func handleAcceptTaskExecution(w http.ResponseWriter, r *http.Request, ctx context.Context, pathParts []string) {
 	if r.Method != "POST" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -2336,11 +2279,25 @@ func handleAcceptTaskExecution(w http.ResponseWriter, r *http.Request, ctx conte
 		return
 	}
 
-	// Return success response
+	// Update the TASK status to "to_verify"
+	if task.ID != 0 {
+		_, err = queries.UpdateTask(ctx, db.UpdateTaskParams{
+			ID:          task.ID,
+			Title:       task.Title,
+			Description: task.Description,
+			Status:      "to_verify",
+		})
+		if err != nil {
+			log.Printf("Warning: failed to update task status to to_verify: %v", err)
+		}
+	}
+
+	// Return success response with project_id for redirect
 	response := map[string]interface{}{
-		"success": true,
-		"message": "Task execution accepted successfully",
-		"status":  "completed",
+		"success":    true,
+		"message":    "Task execution accepted successfully",
+		"status":     "completed",
+		"project_id": task.ProjectID,
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -2368,6 +2325,7 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 						"id":                           dir.ID,
 						"base_directory_id":            dir.BaseDirectoryID,
 						"project_id":                   dir.ProjectID,
+						"project_name":                 project.Name,
 						"path":                         dir.Path,
 						"git_initialized":              dir.GitInitialized,
 						"setup_commands":               dir.SetupCommands,
@@ -2401,6 +2359,9 @@ func handleBaseDirectoriesAPI(w http.ResponseWriter, r *http.Request, ctx contex
 			if err != nil {
 				http.Error(w, "Failed to get tasks", http.StatusInternalServerError)
 				return
+			}
+			if tasks == nil {
+				tasks = []db.Task{}
 			}
 			json.NewEncoder(w).Encode(tasks)
 			return

@@ -34,7 +34,6 @@
 	let isSendingInput = false;
 	let isResendingTask = false;
 	let isDeleting = false;
-	let isRejecting = false;
 	let isAccepting = false;
 
 	$: executionId = $page.params.id;
@@ -538,39 +537,10 @@
 		}
 	}
 
-	async function rejectTaskExecution() {
-		if (isRejecting) return;
-
-		// Show confirmation dialog
-		const confirmed = confirm(`Are you sure you want to reject this task execution? This will:\n\n- Set the status to "rejected"\n- This action cannot be undone.`);
-
-		if (!confirmed) return;
-
-		try {
-			isRejecting = true;
-			const response = await fetch(`/api/task-executions/${executionId}/reject`, {
-				method: 'POST'
-			});
-
-			if (response.ok) {
-				// Refresh the execution data to update the status
-				await loadTaskExecutionDetails();
-			} else {
-				const errorData = await response.text();
-				alert(`Failed to reject task execution: ${errorData}`);
-			}
-		} catch (err) {
-			console.error('Failed to reject task execution:', err);
-			alert('Failed to reject task execution');
-		} finally {
-			isRejecting = false;
-		}
-	}
-
 	async function acceptTaskExecution() {
 		if (isAccepting) return;
 
-		const confirmed = confirm(`Are you sure you want to accept this task execution? This will:\n\n- Kill all associated tmux sessions\n- Run teardown commands\n- Set the status to "completed"`);
+		const confirmed = confirm(`Are you sure you want to accept this task execution? This will:\n\n- Kill all associated tmux sessions\n- Run teardown commands\n- Move the task to "To Verify" status`);
 
 		if (!confirmed) return;
 
@@ -581,7 +551,9 @@
 			});
 
 			if (response.ok) {
-				await loadTaskExecutionDetails();
+				const data = await response.json();
+				// Redirect to project page
+				goto(`/projects/${data.project_id}`);
 			} else {
 				const errorData = await response.text();
 				alert(`Failed to accept task execution: ${errorData}`);
@@ -695,18 +667,6 @@
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
 									</svg>
 									{isAccepting ? 'Accepting...' : 'Accept'}
-								</Button>
-
-								<Button
-									variant="warning"
-									onclick={rejectTaskExecution}
-									disabled={isRejecting || execution.status === 'rejected'}
-									loading={isRejecting}
-								>
-									<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-									</svg>
-									{isRejecting ? 'Rejecting...' : 'Reject'}
 								</Button>
 
 								<Button
